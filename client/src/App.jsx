@@ -89,21 +89,32 @@ const MenuPage = ({ items, onAddToCart }) => {
       <HeroSection />
       <h2 className="mb-4 text-center">Our Menu</h2>
       <div className="row">
-        {items.map((item, index) => (
-          <div className="col-md-6 col-lg-4 mb-4" key={item._id} style={{ animationDelay: `${index * 0.1}s` }}>
-            <div className="card h-100 shadow-sm border-0 menu-card">
-              <img src={item.imageUrl} className="card-img-top" alt={item.name} style={{height: '200px', objectFit: 'cover'}} onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/600x400/CCCCCC/FFFFFF?text=Image+Not+Found'; }}/>
-              <div className="card-body d-flex flex-column">
-                <h5 className="card-title">{item.name}</h5>
-                <p className="card-text text-muted small">{item.description}</p>
-                <div className="mt-auto d-flex justify-content-between align-items-center">
-                   <p className="card-text fs-5 fw-bold text-danger mb-0">${item.price.toFixed(2)}</p>
-                   <button className="btn btn-outline-danger" onClick={() => onAddToCart(item)}>Add to Cart</button>
+        {items.map((item, index) => {
+          const halfPrice = (item.price && typeof item.price.half === 'number') ? item.price.half.toFixed(2) : 'N/A';
+          const fullPrice = (item.price && typeof item.price.full === 'number') ? item.price.full.toFixed(2) : 'N/A';
+
+          return (
+            <div className="col-md-6 col-lg-4 mb-4" key={item._id} style={{ animationDelay: `${index * 0.1}s` }}>
+              <div className="card h-100 shadow-sm border-0 menu-card">
+                <img src={item.imageUrl} className="card-img-top" alt={item.name} style={{height: '200px', objectFit: 'cover'}} onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/600x400/CCCCCC/FFFFFF?text=Image+Not+Found'; }}/>
+                <div className="card-body d-flex flex-column">
+                  <h5 className="card-title">{item.name}</h5>
+                  <p className="card-text text-muted small">{item.description}</p>
+                  <div className="mt-auto">
+                      <div className="d-flex justify-content-between align-items-center mb-2">
+                          <span className="fw-bold text-danger">Half: ${halfPrice}</span>
+                          <Button variant="outline-danger" size="sm" onClick={() => onAddToCart(item, 'half')} disabled={halfPrice === 'N/A'}>Add</Button>
+                      </div>
+                      <div className="d-flex justify-content-between align-items-center">
+                          <span className="fw-bold text-danger">Full: ${fullPrice}</span>
+                          <Button variant="danger" size="sm" onClick={() => onAddToCart(item, 'full')} disabled={fullPrice === 'N/A'}>Add</Button>
+                      </div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   );
@@ -148,7 +159,15 @@ const OrderManager = () => {
                     <tr key={order._id}>
                         <td>{index + 1}</td>
                         <td>{order.customerName}</td>
-                        <td><ul>{order.items.map(item => (<li key={item._id}>{item.quantity}x {item.menuItemId ? item.menuItemId.name : 'N/A'}</li>))}</ul></td>
+                        <td>
+                          <ul>
+                            {order.items.map(item => (
+                              <li key={`${item.menuItemId?._id}-${item.variant}`}>
+                                {item.quantity}x {item.menuItemId ? `${item.menuItemId.name} (${item.variant})` : 'N/A'}
+                              </li>
+                            ))}
+                          </ul>
+                        </td>
                         <td>${(order.totalPrice ?? 0).toFixed(2)}</td>
                         <td>
                             <Form.Select size="sm" value={order.status} onChange={(e) => handleStatusChange(order._id, e.target.value)}>
@@ -168,7 +187,7 @@ const MenuManager = () => {
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [currentItem, setCurrentItem] = useState(null);
-    const [formData, setFormData] = useState({ name: '', description: '', price: '', imageUrl: '' });
+    const [formData, setFormData] = useState({ name: '', description: '', price: { half: '', full: '' }, imageUrl: '' });
 
     useEffect(() => { fetchMenuItems(); }, []);
     
@@ -179,11 +198,42 @@ const MenuManager = () => {
             .catch(error => { console.error("Error fetching menu items:", error); setLoading(false); });
     };
 
-    const handleFormChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+    const handleFormChange = (e) => {
+        const { name, value } = e.target;
+        if (name === 'half' || name === 'full') {
+            setFormData(prev => ({ ...prev, price: { ...prev.price, [name]: value } }));
+        } else {
+            setFormData(prev => ({ ...prev, [name]: value }));
+        }
+    };
 
     const handleShowModal = (item = null) => {
         setCurrentItem(item);
-        setFormData(item ? { ...item, price: item.price.toString() } : { name: '', description: '', price: '', imageUrl: '' });
+        if (item) {
+            // Ensure price is always an object, even for old data structures
+            const price = (typeof item.price === 'object' && item.price !== null) 
+                          ? item.price 
+                          : { half: '', full: '' }; // Default for old items
+
+            setFormData({
+                _id: item._id, // Keep track of id for submission
+                name: item.name || '',
+                description: item.description || '',
+                imageUrl: item.imageUrl || '',
+                price: {
+                    half: price.half?.toString() || '',
+                    full: price.full?.toString() || ''
+                }
+            });
+        } else {
+            // This is for adding a new item
+            setFormData({
+                name: '',
+                description: '',
+                price: { half: '', full: '' },
+                imageUrl: ''
+            });
+        }
         setShowModal(true);
     };
 
@@ -192,26 +242,30 @@ const MenuManager = () => {
     const handleSubmit = (e) => {
         e.preventDefault();
         
-        // --- Client-Side Validation ---
         if (!formData.name.trim() || !formData.description.trim()) {
-            alert('Name and Description cannot be empty.');
-            return;
+            alert('Name and Description cannot be empty.'); return;
         }
-        const price = parseFloat(formData.price);
-        if (isNaN(price) || price <= 0) {
-            alert('Please enter a valid, positive price.');
-            return;
+        const halfPrice = parseFloat(formData.price.half);
+        const fullPrice = parseFloat(formData.price.full);
+        if (isNaN(halfPrice) || halfPrice <= 0 || isNaN(fullPrice) || fullPrice <= 0) {
+            alert('Please enter valid, positive prices for both Half and Full variants.'); return;
         }
 
+        // Exclude _id from the payload
+        const { _id, ...dataToSubmit } = formData;
+        const payload = { 
+            ...dataToSubmit, 
+            price: { half: halfPrice, full: fullPrice } 
+        };
+
         const apiCall = currentItem
-            ? axios.patch(`http://localhost:8001/api/menu/${currentItem._id}`, { ...formData, price: price })
-            : axios.post('http://localhost:8001/api/menu', { ...formData, price: price });
+            ? axios.patch(`http://localhost:8001/api/menu/${currentItem._id}`, payload)
+            : axios.post('http://localhost:8001/api/menu', payload);
 
         apiCall.then(() => { fetchMenuItems(); handleCloseModal(); })
                .catch(error => {
-                    // --- Detailed Error Logging ---
                     console.error('Error saving menu item:', error);
-                    const errorMessage = error.response?.data?.message || 'Failed to save item. Please check the console for details.';
+                    const errorMessage = error.response?.data?.message || 'Failed to save item.';
                     alert(errorMessage);
                 });
     };
@@ -230,18 +284,23 @@ const MenuManager = () => {
         <div>
             <Button variant="danger" className="mb-3" onClick={() => handleShowModal()}>Add New Menu Item</Button>
             <Table striped bordered hover responsive>
-                <thead><tr><th>Name</th><th>Price</th><th>Actions</th></tr></thead>
+                <thead><tr><th>Name</th><th>Half Price</th><th>Full Price</th><th>Actions</th></tr></thead>
                 <tbody>
-                    {menuItems.map(item => (
-                        <tr key={item._id}>
-                            <td>{item.name}</td>
-                            <td>${item.price.toFixed(2)}</td>
-                            <td>
-                                <Button variant="outline-primary" size="sm" className="me-2" onClick={() => handleShowModal(item)}>Edit</Button>
-                                <Button variant="outline-secondary" size="sm" onClick={() => handleDelete(item._id)}>Delete</Button>
-                            </td>
-                        </tr>
-                    ))}
+                    {menuItems.map(item => {
+                        const halfPrice = (item.price && typeof item.price.half === 'number') ? item.price.half.toFixed(2) : 'N/A';
+                        const fullPrice = (item.price && typeof item.price.full === 'number') ? item.price.full.toFixed(2) : 'N/A';
+                        return (
+                            <tr key={item._id}>
+                                <td>{item.name}</td>
+                                <td>${halfPrice}</td>
+                                <td>${fullPrice}</td>
+                                <td>
+                                    <Button variant="outline-primary" size="sm" className="me-2" onClick={() => handleShowModal(item)}>Edit</Button>
+                                    <Button variant="outline-secondary" size="sm" onClick={() => handleDelete(item._id)}>Delete</Button>
+                                </td>
+                            </tr>
+                        )
+                    })}
                 </tbody>
             </Table>
 
@@ -251,7 +310,8 @@ const MenuManager = () => {
                     <Form onSubmit={handleSubmit}>
                         <Form.Group className="mb-3"><Form.Label>Name</Form.Label><Form.Control type="text" name="name" value={formData.name} onChange={handleFormChange} required /></Form.Group>
                         <Form.Group className="mb-3"><Form.Label>Description</Form.Label><Form.Control as="textarea" rows={3} name="description" value={formData.description} onChange={handleFormChange} required /></Form.Group>
-                        <Form.Group className="mb-3"><Form.Label>Price</Form.Label><Form.Control type="number" step="0.01" name="price" value={formData.price} onChange={handleFormChange} required /></Form.Group>
+                        <Form.Group className="mb-3"><Form.Label>Half Price</Form.Label><Form.Control type="number" step="0.01" name="half" value={formData.price.half} onChange={handleFormChange} required /></Form.Group>
+                        <Form.Group className="mb-3"><Form.Label>Full Price</Form.Label><Form.Control type="number" step="0.01" name="full" value={formData.price.full} onChange={handleFormChange} required /></Form.Group>
                         <Form.Group className="mb-3"><Form.Label>Image URL</Form.Label><Form.Control type="text" name="imageUrl" value={formData.imageUrl} onChange={handleFormChange} /></Form.Group>
                         <Button variant="danger" type="submit">Save Changes</Button>
                     </Form>
@@ -282,11 +342,11 @@ const AdminPage = () => (
 // --- Cart Modal Component ---
 const CartModal = ({ show, handleClose, cartItems, setCartItems, submitOrder }) => {
     const [customerName, setCustomerName] = useState('');
-    const handleQuantityChange = (item, quantity) => {
-        if (quantity < 1) { setCartItems(cartItems.filter(cartItem => cartItem._id !== item._id)); } 
-        else { setCartItems(cartItems.map(cartItem => cartItem._id === item._id ? { ...cartItem, quantity: quantity } : cartItem)); }
+    const handleQuantityChange = (cartId, quantity) => {
+        if (quantity < 1) { setCartItems(cartItems.filter(item => item.cartId !== cartId)); } 
+        else { setCartItems(cartItems.map(item => item.cartId === cartId ? { ...item, quantity: quantity } : item)); }
     };
-    const calculateTotal = () => cartItems.reduce((total, item) => total + item.price * item.quantity, 0).toFixed(2);
+    const calculateTotal = () => cartItems.reduce((total, item) => total + item.priceAtOrder * item.quantity, 0).toFixed(2);
     const handleSubmit = (e) => {
         e.preventDefault();
         if(!customerName.trim()) { alert("Please enter your name."); return; }
@@ -301,14 +361,14 @@ const CartModal = ({ show, handleClose, cartItems, setCartItems, submitOrder }) 
                     <>
                         <ListGroup variant="flush">
                             {cartItems.map(item => (
-                                <ListGroup.Item key={item._id} className="d-flex justify-content-between align-items-center">
-                                    <div><h6 className="mb-0">{item.name}</h6><small className="text-muted">${item.price.toFixed(2)}</small></div>
+                                <ListGroup.Item key={item.cartId} className="d-flex justify-content-between align-items-center">
+                                    <div><h6 className="mb-0">{item.name} <span className="text-muted small">({item.variant})</span></h6><small className="text-muted">${item.priceAtOrder.toFixed(2)}</small></div>
                                     <div className="d-flex align-items-center">
-                                        <Button variant="outline-secondary" size="sm" onClick={() => handleQuantityChange(item, item.quantity - 1)}>-</Button>
+                                        <Button variant="outline-secondary" size="sm" onClick={() => handleQuantityChange(item.cartId, item.quantity - 1)}>-</Button>
                                         <span className="mx-2">{item.quantity}</span>
-                                        <Button variant="outline-secondary" size="sm" onClick={() => handleQuantityChange(item, item.quantity + 1)}>+</Button>
+                                        <Button variant="outline-secondary" size="sm" onClick={() => handleQuantityChange(item.cartId, item.quantity + 1)}>+</Button>
                                     </div>
-                                    <CloseButton onClick={() => handleQuantityChange(item, 0)} />
+                                    <CloseButton onClick={() => handleQuantityChange(item.cartId, 0)} />
                                 </ListGroup.Item>
                             ))}
                         </ListGroup>
@@ -332,13 +392,10 @@ function App() {
   const [menuItems, setMenuItems] = useState([]);
   const [cartItems, setCartItems] = useState([]);
   const [showCart, setShowCart] = useState(false);
-  const [pageKey, setPageKey] = useState(Date.now()); // Add key to force re-render for animation
+  const [pageKey, setPageKey] = useState(Date.now());
 
   useEffect(() => {
-    const handleHashChange = () => {
-        setRoute(window.location.hash || '#/');
-        setPageKey(Date.now()); // Change key on route change
-    }
+    const handleHashChange = () => { setRoute(window.location.hash || '#/'); setPageKey(Date.now()); }
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
@@ -349,18 +406,35 @@ function App() {
       .catch(error => console.error("Error fetching menu items:", error));
   }, []);
 
-  const handleAddToCart = (itemToAdd) => {
+  const handleAddToCart = (itemToAdd, variant) => {
     setCartItems(prevItems => {
-        const isItemInCart = prevItems.find(item => item._id === itemToAdd._id);
-        if (isItemInCart) { return prevItems.map(item => item._id === itemToAdd._id ? { ...item, quantity: item.quantity + 1 } : item); }
-        return [...prevItems, { ...itemToAdd, quantity: 1 }];
+        const cartId = `${itemToAdd._id}-${variant}`;
+        const isItemInCart = prevItems.find(item => item.cartId === cartId);
+        
+        if (isItemInCart) { 
+            return prevItems.map(item => item.cartId === cartId ? { ...item, quantity: item.quantity + 1 } : item); 
+        }
+
+        const newItem = { 
+            ...itemToAdd, 
+            quantity: 1, 
+            variant: variant,
+            priceAtOrder: itemToAdd.price[variant],
+            cartId: cartId
+        };
+        return [...prevItems, newItem];
     });
   };
 
   const submitOrder = (customerName) => {
     const orderDetails = {
-        items: cartItems.map(item => ({ menuItemId: item._id, quantity: item.quantity })),
-        totalPrice: cartItems.reduce((total, item) => total + item.price * item.quantity, 0),
+        items: cartItems.map(item => ({ 
+            menuItemId: item._id, 
+            quantity: item.quantity,
+            variant: item.variant,
+            priceAtOrder: item.priceAtOrder
+        })),
+        totalPrice: cartItems.reduce((total, item) => total + item.priceAtOrder * item.quantity, 0),
         customerName: customerName
     };
     axios.post('http://localhost:8001/api/orders', orderDetails)
@@ -383,7 +457,15 @@ function App() {
       <header>
         <nav className="navbar navbar-expand-lg navbar-light bg-light shadow-sm sticky-top">
           <div className="container">
-            <a className="navbar-brand" href="#/"><img src="https://placehold.co/40x40/d9534f/FFFFFF?text=SB" alt="Steamy Bites Logo" className="d-inline-block align-text-top me-2 rounded-circle" /><span className="fw-bold">Steamy Bites</span></a>
+            <a className="navbar-brand d-flex align-items-center" href="#/">
+  <img 
+    src="https://lh3.googleusercontent.com/Ye0hjUzWm-MM4eTC3ma2TMvWviXUn2Ufdsqq7kEHCnKi5ZPSii3tW-D8Ei5C-4qgUCqGUHGXk0tk4AkJdnWPHAz7YbKEXYEjF2CeFn01" 
+    alt="Steamy Bites Logo" 
+    className="me-2 rounded-circle" 
+    width="100" 
+  />
+  <span className="fw-bold">Steamy Bites</span>
+</a>
             <button className="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"><span className="navbar-toggler-icon"></span></button>
             <div className="collapse navbar-collapse justify-content-center" id="navbarNav">
               <ul className="navbar-nav">
