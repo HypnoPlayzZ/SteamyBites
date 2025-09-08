@@ -191,12 +191,29 @@ const MenuManager = () => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
+        
+        // --- Client-Side Validation ---
+        if (!formData.name.trim() || !formData.description.trim()) {
+            alert('Name and Description cannot be empty.');
+            return;
+        }
+        const price = parseFloat(formData.price);
+        if (isNaN(price) || price <= 0) {
+            alert('Please enter a valid, positive price.');
+            return;
+        }
+
         const apiCall = currentItem
-            ? axios.patch(`http://localhost:8001/api/menu/${currentItem._id}`, { ...formData, price: parseFloat(formData.price) })
-            : axios.post('http://localhost:8001/api/menu', { ...formData, price: parseFloat(formData.price) });
+            ? axios.patch(`http://localhost:8001/api/menu/${currentItem._id}`, { ...formData, price: price })
+            : axios.post('http://localhost:8001/api/menu', { ...formData, price: price });
 
         apiCall.then(() => { fetchMenuItems(); handleCloseModal(); })
-               .catch(error => { console.error('Error saving menu item:', error); alert('Failed to save item.'); });
+               .catch(error => {
+                    // --- Detailed Error Logging ---
+                    console.error('Error saving menu item:', error);
+                    const errorMessage = error.response?.data?.message || 'Failed to save item. Please check the console for details.';
+                    alert(errorMessage);
+                });
     };
 
     const handleDelete = (id) => {
@@ -211,7 +228,7 @@ const MenuManager = () => {
 
     return (
         <div>
-            <Button variant="primary" className="mb-3" onClick={() => handleShowModal()}>Add New Menu Item</Button>
+            <Button variant="danger" className="mb-3" onClick={() => handleShowModal()}>Add New Menu Item</Button>
             <Table striped bordered hover responsive>
                 <thead><tr><th>Name</th><th>Price</th><th>Actions</th></tr></thead>
                 <tbody>
@@ -299,7 +316,7 @@ const CartModal = ({ show, handleClose, cartItems, setCartItems, submitOrder }) 
                         <div className="text-end"><h4>Total: ${calculateTotal()}</h4></div>
                         <Form onSubmit={handleSubmit}>
                             <Form.Group className="mb-3"><Form.Label>Your Name</Form.Label><Form.Control type="text" placeholder="Enter your name" value={customerName} onChange={(e) => setCustomerName(e.target.value)} required /></Form.Group>
-                            <Button variant="primary" type="submit" className="w-100">Place Order</Button>
+                            <Button variant="danger" type="submit" className="w-100">Place Order</Button>
                         </Form>
                     </>
                 )}
@@ -376,7 +393,7 @@ function App() {
                 <li className="nav-item"><a className={`nav-link mx-2 ${route === '#/admin' ? 'active fw-bold border-bottom border-danger border-2' : ''}`} href="#/admin">Admin</a></li>
               </ul>
             </div>
-            <Button variant="primary" onClick={() => setShowCart(true)} className="position-relative">Order Now <Badge pill bg="dark" className="position-absolute top-0 start-100 translate-middle">{cartItems.reduce((count, item) => count + item.quantity, 0)}</Badge></Button>
+            <Button variant="danger" onClick={() => setShowCart(true)} className="position-relative">Order Now <Badge pill bg="dark" className="position-absolute top-0 start-100 translate-middle">{cartItems.reduce((count, item) => count + item.quantity, 0)}</Badge></Button>
           </div>
         </nav>
       </header>
