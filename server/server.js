@@ -11,7 +11,7 @@ const mongoURI = process.env.MONGODB_URI || 'mongodb+srv://amplify:22453372@chet
 const jwtSecret = process.env.JWT_SECRET || 'your_jwt_secret_key';
 
 // --- A More Robust CORS Configuration ---
-const allowedOrigins = ['https://clever-kitten-342f9e.netlify.app'];
+const allowedOrigins = ['https://regal-dolphin-6f3c6f.netlify.app'];
 
 const corsOptions = {
   origin: function (origin, callback) {
