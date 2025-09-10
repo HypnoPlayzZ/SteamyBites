@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Create a single, configured Axios instance
 export const api = axios.create({
-    baseURL: 'http://localhost:8001/api',
+    baseURL: 'https://steamybites.onrender.com/api',
 });
 
 // This "smart" interceptor checks the URL of each request 
