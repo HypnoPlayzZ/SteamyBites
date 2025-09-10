@@ -11,7 +11,7 @@ const mongoURI = process.env.MONGODB_URI || 'mongodb+srv://amplify:22453372@chet
 const jwtSecret = process.env.JWT_SECRET || 'your_jwt_secret_key';
 
 app.use(cors({
-  origin: 'https://marvelous-kangaroo-c3f522.netlify.app/#/p' // <-- Your live Netlify URL
+  origin: 'https://clever-kitten-342f9e.netlify.app/#/' // <-- Your live Netlify URL
 }));
 
 app.use(express.json());
