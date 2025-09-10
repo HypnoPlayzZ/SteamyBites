@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Nav, Tab, Card, Alert, Button, Modal, Form } from 'react-bootstrap';
+import { Table, Nav, Tab, Form, Button, Modal, Card, Alert } from 'react-bootstrap';
 import { api } from '../api';
-
 
 // --- Admin Page Components ---
 const AdminRegisterPage = () => {
@@ -111,7 +110,7 @@ const MenuManager = () => {
     
     const fetchMenuItems = () => {
         setLoading(true);
-        api.get('/menu') // This is a public route
+        api.get('/menu')
             .then(response => { setMenuItems(response.data); setLoading(false); })
             .catch(error => { console.error("Error fetching menu items:", error); setLoading(false); });
     };
@@ -235,8 +234,8 @@ const ComplaintManager = () => {
             <tbody>
                 {complaints.map(c => (
                     <tr key={c._id}>
-                        <td>{c.user.name} ({c.user.email})</td>
-                        <td>{new Date(c.orderId.createdAt).toLocaleString()}</td>
+                        <td>{c.user ? `${c.user.name} (${c.user.email})` : 'User Not Found'}</td>
+                        <td>{c.orderId ? new Date(c.orderId.createdAt).toLocaleString() : 'N/A'}</td>
                         <td>{c.message}</td>
                         <td>
                              <Form.Select size="sm" value={c.status} onChange={(e) => handleStatusChange(c._id, e.target.value)}>
@@ -253,9 +252,9 @@ const ComplaintManager = () => {
 const AdminDashboard = ({ adminName, handleLogout }) => (
     <div className="fade-in">
         <div className="d-flex justify-content-between align-items-center mb-4">
-            <h1 className="mb-0">Admin Dashboard</h1>
+            <h1 className="text-center">Admin Dashboard</h1>
             <div>
-                <span className="me-3">Welcome, {adminName}!</span>
+                <span className="me-3">Welcome, {adminName}</span>
                 <Button variant="outline-secondary" size="sm" onClick={() => handleLogout('admin')}>Logout</Button>
             </div>
         </div>
@@ -274,7 +273,6 @@ const AdminDashboard = ({ adminName, handleLogout }) => (
         </Tab.Container>
     </div>
 );
-
 
 export default AdminDashboard;
 

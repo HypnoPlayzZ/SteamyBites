@@ -1,20 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 
-// Import all separated components
+// Import the separated components
 import { api } from './api.js';
-import LoginPage from './pages/LoginPage.jsx'
-import AdminDashboard from './pages/AdminDashboard.jsx'
-import CustomerDashboard from './pages/CustomerDashboard.jsx'
-import RegisterPage from './pages/RegisterPage.jsx'
-import AdminRegisterPage from './pages/AdminRegisterPage.jsx'
-import MenuPage from './pages/MenuPage.jsx'
-import AdminLoginPage from './pages/AdminLoginPage.jsx'
-import { AboutPage, ContactPage } from './pages/StaticPage.jsx'
-import CartModal from './components/CartModalMain.jsx'
-import GlobalStyles from './styles/GlobalStyles.jsx'
-import Header from './components/HeaderMain.jsx'
-import Footer from './components/FooterMain.jsx'
+import LoginPage from './pages/LoginPage.jsx';
+import AdminDashboard from './pages/AdminDashboard.jsx';
+import CustomerDashboard from './pages/CustomerDashboard.jsx';
+import RegisterPage from './pages/RegisterPage.jsx';
+import AdminRegisterPage from './pages/AdminRegisterPage.jsx';
+import MenuPage from './pages/MenuPage.jsx';
+import AdminLoginPage from './pages/AdminLoginPage.jsx';
+import { AboutPage, ContactPage } from './pages/StaticPage.jsx';
+import CartModal from './components/CartModalMain.jsx';
+import Header from './components/HeaderMain.jsX';
+import Footer from './components/FooterMain.jsx';
+import { GlobalStyles } from './styles/GlobalStyles.jsx';
 
 
 // --- Main App ---
@@ -87,9 +87,11 @@ function App() {
             menuItemId: item._id, 
             quantity: item.quantity,
             variant: item.variant,
-            priceAtOrder: item.priceAtOrder
+            priceAtOrder: item.priceAtOrder,
+            instructions: item.instructions
         })),
         totalPrice: cartItems.reduce((total, item) => total + item.priceAtOrder * item.quantity, 0),
+        customerName: auth.customer.name
     };
     api.post('/orders', orderDetails)
         .then(() => { 
@@ -99,24 +101,26 @@ function App() {
         })
         .catch(error => { 
             console.error('Error placing order:', error); 
-            alert('There was a problem placing your order.'); 
+            const errorMessage = error.response?.data?.message || 'There was a problem placing your order.';
+            alert(errorMessage);
         });
   };
   
-    const handleAddToCart = (itemToAdd, variant) => {
+    const handleAddToCart = (itemToAdd, variant, quantity = 1, instructions = '') => {
         setCartItems(prevItems => {
-            const cartId = `${itemToAdd._id}-${variant}`;
+            const cartId = `${itemToAdd._id}-${variant}-${instructions}`;
             const isItemInCart = prevItems.find(item => item.cartId === cartId);
             
             if (isItemInCart) { 
-                return prevItems.map(item => item.cartId === cartId ? { ...item, quantity: item.quantity + 1 } : item); 
+                return prevItems.map(item => item.cartId === cartId ? { ...item, quantity: item.quantity + quantity } : item); 
             }
 
             const newItem = { 
                 ...itemToAdd, 
-                quantity: 1, 
+                quantity: quantity, 
                 variant: variant,
                 priceAtOrder: itemToAdd.price[variant],
+                instructions: instructions,
                 cartId: cartId
             };
             return [...prevItems, newItem];
@@ -144,6 +148,7 @@ function App() {
         route={route}
         auth={auth}
         isCustomerLoggedIn={isCustomerLoggedIn}
+        isAdminLoggedIn={isAdminLoggedIn}
         handleLogout={handleLogout}
         setShowCart={setShowCart}
         cartItems={cartItems}

@@ -3,10 +3,10 @@ import { Modal, Button, Form, ListGroup, Badge, CloseButton } from 'react-bootst
 
 const CartModal = ({ show, handleClose, cartItems, setCartItems, submitOrder, isLoggedIn }) => {
     const handleQuantityChange = (item, quantity) => {
-        if (quantity < 1) {
-            setCartItems(cartItems.filter(cartItem => cartItem.cartId !== item.cartId));
-        } else {
-            setCartItems(cartItems.map(cartItem => cartItem.cartId === item.cartId ? { ...cartItem, quantity: quantity } : cartItem));
+        if (quantity < 1) { 
+            setCartItems(cartItems.filter(cartItem => cartItem.cartId !== item.cartId)); 
+        } else { 
+            setCartItems(cartItems.map(cartItem => cartItem.cartId === item.cartId ? { ...cartItem, quantity: quantity } : cartItem)); 
         }
     };
     
@@ -25,14 +25,22 @@ const CartModal = ({ show, handleClose, cartItems, setCartItems, submitOrder, is
     
     return (
         <Modal show={show} onHide={handleClose} size="lg">
-            <Modal.Header closeButton><Modal.Title>Your Order</Modal.Title></Modal.Header>
+            <Modal.Header closeButton>
+                <Modal.Title>Your Order</Modal.Title>
+            </Modal.Header>
             <Modal.Body>
-                {cartItems.length === 0 ? ( <p>Your cart is empty.</p> ) : (
+                {cartItems.length === 0 ? ( 
+                    <p>Your cart is empty.</p> 
+                ) : (
                     <>
                         <ListGroup variant="flush">
                             {cartItems.map(item => (
                                 <ListGroup.Item key={item.cartId} className="d-flex justify-content-between align-items-center">
-                                    <div><h6 className="mb-0">{item.name} ({item.variant})</h6><small className="text-muted">${item.priceAtOrder.toFixed(2)}</small></div>
+                                    <div>
+                                        <h6 className="mb-0">{item.name} ({item.variant})</h6>
+                                        <small className="text-muted">${item.priceAtOrder.toFixed(2)}</small>
+                                        {item.instructions && <small className="d-block text-muted"><em>"{item.instructions}"</em></small>}
+                                    </div>
                                     <div className="d-flex align-items-center">
                                         <Button variant="outline-secondary" size="sm" onClick={() => handleQuantityChange(item, item.quantity - 1)}>-</Button>
                                         <span className="mx-2">{item.quantity}</span>
@@ -55,3 +63,4 @@ const CartModal = ({ show, handleClose, cartItems, setCartItems, submitOrder, is
 };
 
 export default CartModal;
+
