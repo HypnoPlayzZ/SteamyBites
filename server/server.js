@@ -10,9 +10,22 @@ const port = process.env.PORT || 8001;
 const mongoURI = process.env.MONGODB_URI || 'mongodb+srv://amplify:22453372@chetanbackend.rckxgtc.mongodb.net/?retryWrites=true&w=majority&appName=ChetanBackend';
 const jwtSecret = process.env.JWT_SECRET || 'your_jwt_secret_key';
 
-app.use(cors({
-  origin: 'https://clever-kitten-342f9e.netlify.app/#/' // <-- Your live Netlify URL
-}));
+// --- A More Robust CORS Configuration ---
+const allowedOrigins = ['https://clever-kitten-342f9e.netlify.app'];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests if the origin is in our whitelist, or if there's no origin (like for server-to-server requests or mobile apps)
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
+};
+
+// Use the new, more flexible CORS options
+app.use(cors(corsOptions));
 
 app.use(express.json());
 
