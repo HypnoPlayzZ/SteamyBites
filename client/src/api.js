@@ -10,8 +10,8 @@ const getToken = (url) => {
 
 // Create an Axios instance
 const api = axios.create({
-    // Use the secure HTTPS endpoint for your backend
-    baseURL: 'https://steamy-bites-env.eba-27a3c3b2.us-east-1.elasticbeanstalk.com/api',
+    // Corrected the URL to use the secure HTTPS protocol
+    baseURL: 'https://steamybites.ap-south-1.elasticbeanstalk.com/api',
 });
 
 // Use an interceptor to dynamically add the correct auth token
