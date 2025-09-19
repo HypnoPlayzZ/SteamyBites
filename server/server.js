@@ -1,9 +1,32 @@
 import express from 'express';
-import mongoose from 'mongoose';
 import cors from 'cors';
+import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import 'dotenv/config';
+import { v2 as cloudinary } from 'cloudinary';
+import multer from 'multer';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
+import csv from 'csv-parser';
+import stream from 'stream';
+
+// --- Configuration ---
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+const imageStorage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+        folder: 'steamy-bites-menu',
+        allowed_formats: ['jpg', 'png', 'jpeg'],
+    },
+});
+
+const imageUpload = multer({ storage: imageStorage });
+const csvUpload = multer({ storage: multer.memoryStorage() });
 
 const app = express();
 const port = process.env.PORT || 8001;
@@ -14,7 +37,7 @@ app.use(cors());
 app.use(express.json());
 
 // --- Database Connection ---
-mongoose.connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
+mongoose.connect(mongoURI)
     .then(() => {
         console.log('MongoDB connected successfully');
         seedAdminUser();
@@ -23,15 +46,17 @@ mongoose.connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
 
 // --- Mongoose Schemas ---
 const PriceSchema = new mongoose.Schema({
-    half: { type: Number, required: true },
+    half: { type: Number },
     full: { type: Number, required: true }
 }, { _id: false });
 
 const MenuItemSchema = new mongoose.Schema({
-    name: { type: String, required: true },
+    name: { type: String, required: true, unique: true },
     description: { type: String, required: true },
     price: { type: PriceSchema, required: true },
     imageUrl: { type: String, default: '' },
+    category: { type: String, required: true, trim: true, default: 'Uncategorized' },
+    position: { type: Number, default: 0 }
 });
 
 const OrderItemSchema = new mongoose.Schema({
@@ -39,15 +64,22 @@ const OrderItemSchema = new mongoose.Schema({
     quantity: { type: Number, required: true },
     variant: { type: String, enum: ['half', 'full'], required: true },
     priceAtOrder: { type: Number, required: true },
-    instructions: { type: String, default: '' } // <-- NEW FIELD
+    instructions: { type: String, default: '' }
 }, { _id: false });
 
 const OrderSchema = new mongoose.Schema({
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     items: [OrderItemSchema],
     totalPrice: { type: Number, required: true },
-    customerName: { type: String, required: true }, // Keep for display purposes
-    status: { type: String, default: 'Received', enum: ['Received', 'Preparing', 'Out for Delivery', 'Completed'] },
+    finalPrice: { type: Number, required: true },
+    appliedCoupon: {
+        code: String,
+        discountType: String,
+        discountValue: Number
+    },
+    customerName: { type: String, required: true },
+    status: { type: String, default: 'Received', enum: ['Received', 'Preparing', 'Ready', 'Out for Delivery', 'Delivered', 'Rejected'] },
+    isAcknowledged: { type: Boolean, default: false },
 }, { timestamps: true });
 
 const UserSchema = new mongoose.Schema({
@@ -55,7 +87,7 @@ const UserSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     role: { type: String, default: 'customer', enum: ['customer', 'admin'] }
-}, { collection: 'users_v2' }); // Use a new collection
+}, { collection: 'users_v2' });
 
 
 const ComplaintSchema = new mongoose.Schema({
@@ -65,12 +97,19 @@ const ComplaintSchema = new mongoose.Schema({
     status: { type: String, default: 'Pending', enum: ['Pending', 'In Progress', 'Resolved'] }
 }, { timestamps: true });
 
+const CouponSchema = new mongoose.Schema({
+    code: { type: String, required: true, unique: true, uppercase: true },
+    description: { type: String, required: true },
+    discountType: { type: String, required: true, enum: ['percentage', 'fixed'] },
+    discountValue: { type: Number, required: true },
+    isActive: { type: Boolean, default: true }
+});
 
 const MenuItem = mongoose.model('MenuItem', MenuItemSchema);
 const Order = mongoose.model('Order', OrderSchema);
 const User = mongoose.model('User', UserSchema);
 const Complaint = mongoose.model('Complaint', ComplaintSchema);
-
+const Coupon = mongoose.model('Coupon', CouponSchema);
 
 // --- Middleware ---
 const authMiddleware = (req, res, next) => {
@@ -98,16 +137,66 @@ const adminMiddleware = async (req, res, next) => {
     }
 };
 
+// Health Check for AWS
+app.get('/', (req, res) => {
+  res.status(200).send('Server is healthy and running.');
+});
 
 // --- API Routes ---
 
 // Public Routes
 app.get('/api/menu', async (req, res) => {
     try {
-        const menuItems = await MenuItem.find();
-        res.json(menuItems);
+        const menuItems = await MenuItem.find().sort({ position: 1 });
+        const categorizedMenu = menuItems.reduce((acc, item) => {
+            const category = item.category;
+            if (!acc[category]) {
+                acc[category] = [];
+            }
+            acc[category].push(item);
+            return acc;
+        }, {});
+        res.json(categorizedMenu);
     } catch (error) {
         res.status(500).json({ message: 'Error fetching menu items' });
+    }
+});
+
+app.get('/api/coupons', async (req, res) => {
+    try {
+        const coupons = await Coupon.find({ isActive: true });
+        res.json(coupons);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching coupons' });
+    }
+});
+
+app.post('/api/coupons/validate', async (req, res) => {
+    try {
+        const { code, cartTotal } = req.body;
+        const coupon = await Coupon.findOne({ code: code.toUpperCase(), isActive: true });
+
+        if (!coupon) {
+            return res.status(404).json({ message: 'Invalid or expired coupon code.' });
+        }
+
+        let discountAmount = 0;
+        if (coupon.discountType === 'percentage') {
+            discountAmount = (cartTotal * coupon.discountValue) / 100;
+        } else {
+            discountAmount = coupon.discountValue;
+        }
+
+        const finalPrice = Math.max(0, cartTotal - discountAmount);
+
+        res.json({
+            message: 'Coupon applied successfully!',
+            discountAmount,
+            finalPrice,
+            coupon
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Server error during coupon validation.' });
     }
 });
 
@@ -183,10 +272,11 @@ app.get('/api/my-complaints', authMiddleware, async (req, res) => {
 });
 
 
-// Admin Routes (Protected)
-app.use('/api/admin', authMiddleware, adminMiddleware); // Protect all following admin routes
+// --- Admin Router ---
+const adminRouter = express.Router();
+app.use('/api/admin', authMiddleware, adminMiddleware, adminRouter);
 
-app.post('/api/admin/register', async (req, res) => {
+adminRouter.post('/register', async (req, res) => {
     try {
         const { name, email, password } = req.body;
         const existingUser = await User.findOne({ email });
@@ -199,36 +289,220 @@ app.post('/api/admin/register', async (req, res) => {
         res.status(500).json({ message: 'Error registering admin user' });
     }
 });
-app.get('/api/admin/orders', async (req, res) => {
+
+adminRouter.get('/orders', async (req, res) => {
     const orders = await Order.find().populate('items.menuItemId').sort({ createdAt: -1 });
     res.json(orders);
 });
-app.patch('/api/admin/orders/:id', async (req, res) => {
-    const updatedOrder = await Order.findByIdAndUpdate(req.params.id, { status: req.body.status }, { new: true }).populate('items.menuItemId');
-    res.json(updatedOrder);
+
+adminRouter.patch('/orders/:id/status', async (req, res) => {
+    try {
+        const { status } = req.body;
+        const validStatuses = ['Preparing', 'Ready', 'Out for Delivery', 'Delivered', 'Rejected'];
+        if (!validStatuses.includes(status)) {
+            return res.status(400).json({ message: 'Invalid status update.' });
+        }
+        const updatedOrder = await Order.findByIdAndUpdate(req.params.id, { status }, { new: true }).populate('items.menuItemId');
+        if (!updatedOrder) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
+        res.json(updatedOrder);
+    } catch (error) {
+        res.status(500).json({ message: 'Error updating order status' });
+    }
 });
-app.post('/api/admin/menu', async (req, res) => {
-    const newItem = new MenuItem(req.body);
-    await newItem.save();
-    res.status(201).json(newItem);
+
+
+adminRouter.patch('/orders/:id/acknowledge', async (req, res) => {
+    try {
+        const updatedOrder = await Order.findByIdAndUpdate(req.params.id, { isAcknowledged: true }, { new: true }).populate('items.menuItemId');
+        if (!updatedOrder) {
+            return res.status(404).json({ message: 'Order not found' });
+        }
+        res.json(updatedOrder);
+    } catch (error) {
+        res.status(500).json({ message: 'Error acknowledging order' });
+    }
 });
-app.patch('/api/admin/menu/:id', async (req, res) => {
-    const updatedItem = await MenuItem.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.json(updatedItem);
+
+adminRouter.post('/menu', imageUpload.single('image'), async (req, res) => {
+    try {
+        const { name, description, priceHalf, priceFull, category } = req.body;
+        const lastItem = await MenuItem.findOne({ category }).sort({ position: -1 });
+        const newPosition = lastItem ? lastItem.position + 1 : 0;
+        
+        const newMenuItem = new MenuItem({
+            name,
+            description,
+            price: { 
+                half: parseFloat(priceHalf) || undefined, 
+                full: parseFloat(priceFull) 
+            },
+            imageUrl: req.file ? req.file.path : '',
+            category,
+            position: newPosition,
+        });
+        await newMenuItem.save();
+        res.status(201).json(newMenuItem);
+    } catch (error) {
+        res.status(400).json({ message: 'Error creating menu item', error: error.message });
+    }
 });
-app.delete('/api/admin/menu/:id', async (req, res) => {
+
+adminRouter.patch('/menu/reorder', async (req, res) => {
+    try {
+        const { category, orderedIds } = req.body;
+        const bulkOps = orderedIds.map((id, index) => ({
+            updateOne: {
+                filter: { _id: id, category: category },
+                update: { $set: { position: index } }
+            }
+        }));
+        await MenuItem.bulkWrite(bulkOps);
+        res.status(200).json({ message: 'Menu order updated successfully.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to reorder menu items.' });
+    }
+});
+
+adminRouter.patch('/menu/:id', imageUpload.single('image'), async (req, res) => {
+    try {
+        const { name, description, priceHalf, priceFull, category, imageUrl: existingImageUrl } = req.body;
+        const updateData = {
+            name,
+            description,
+            category,
+            price: { 
+                half: parseFloat(priceHalf) || undefined,
+                full: parseFloat(priceFull) 
+            },
+        };
+
+        if (req.file) {
+            updateData.imageUrl = req.file.path;
+        } else {
+            updateData.imageUrl = existingImageUrl;
+        }
+
+        const updatedItem = await MenuItem.findByIdAndUpdate(req.params.id, updateData, { new: true });
+        if (!updatedItem) return res.status(404).json({ message: 'Menu item not found' });
+        res.json(updatedItem);
+    } catch (error) {
+        res.status(400).json({ message: 'Error updating menu item', error: error.message });
+    }
+});
+
+adminRouter.delete('/menu/:id', async (req, res) => {
     await MenuItem.findByIdAndDelete(req.params.id);
     res.json({ message: 'Menu item deleted' });
 });
-app.get('/api/admin/complaints', async (req, res) => {
+
+adminRouter.get('/complaints', async (req, res) => {
     const complaints = await Complaint.find().populate('user', 'name email').populate('orderId', 'createdAt').sort({ createdAt: -1 });
     res.json(complaints);
 });
-app.patch('/api/admin/complaints/:id', async (req, res) => {
+
+adminRouter.patch('/complaints/:id', async (req, res) => {
     const updatedComplaint = await Complaint.findByIdAndUpdate(req.params.id, { status: req.body.status }, { new: true }).populate('user', 'name email').populate('orderId', 'createdAt');
     res.json(updatedComplaint);
 });
 
+adminRouter.post('/menu/upload-csv', csvUpload.single('csvFile'), async (req, res) => {
+    if (!req.file) {
+        return res.status(400).send('No CSV file uploaded.');
+    }
+
+    const results = [];
+    const bufferStream = new stream.PassThrough();
+    bufferStream.end(req.file.buffer);
+
+    bufferStream
+        .pipe(csv())
+        .on('data', (data) => results.push(data))
+        .on('end', async () => {
+            let updatedCount = 0;
+            let createdCount = 0;
+
+            for (const row of results) {
+                try {
+                    const name = row['Item'];
+                    const category = row['Category'] || 'Uncategorized';
+                    const priceFullText = row['Full'] || row['Item Price'];
+                    const priceHalfText = row['Half'];
+
+                    if (!name || !priceFullText) continue;
+                    
+                    const priceFull = parseFloat(priceFullText);
+                    if (isNaN(priceFull)) continue;
+                    
+                    const priceHalf = parseFloat(priceHalfText);
+                    
+                    const existingItem = await MenuItem.findOne({ name: name });
+                    
+                    if (existingItem) {
+                        const updatePayload = {
+                            'price.full': priceFull,
+                            category: category,
+                        };
+                        if (!isNaN(priceHalf)) {
+                            updatePayload['price.half'] = priceHalf;
+                        } else {
+                            await MenuItem.updateOne({ _id: existingItem._id }, { $unset: { 'price.half': "" } });
+                        }
+                        await MenuItem.updateOne({ _id: existingItem._id }, { $set: updatePayload });
+                        updatedCount++;
+                    } else {
+                        const lastItem = await MenuItem.findOne({ category }).sort({ position: -1 });
+                        const newPosition = lastItem ? lastItem.position + 1 : 0;
+                        
+                        const newItemData = {
+                            name,
+                            description: 'Description to be added.',
+                            imageUrl: '',
+                            category,
+                            position: newPosition,
+                            price: {
+                                full: priceFull,
+                            }
+                        };
+                        if (!isNaN(priceHalf)) {
+                            newItemData.price.half = priceHalf;
+                        }
+                        const newItem = new MenuItem(newItemData);
+                        await newItem.save();
+                        createdCount++;
+                    }
+                } catch (e) {
+                    console.error(`Could not process row for item: ${row['Item'] || 'UNKNOWN'}`, e);
+                }
+            }
+            res.status(200).json({ 
+                message: 'CSV processed successfully.',
+                updated: updatedCount,
+                created: createdCount,
+            });
+        });
+});
+
+adminRouter.get('/coupons', async (req, res) => {
+    const coupons = await Coupon.find();
+    res.json(coupons);
+});
+
+adminRouter.post('/coupons', async (req, res) => {
+    try {
+        const newCoupon = new Coupon({ ...req.body, code: req.body.code.toUpperCase() });
+        await newCoupon.save();
+        res.status(201).json(newCoupon);
+    } catch (error) {
+        res.status(400).json({ message: 'Error creating coupon', error: error.message });
+    }
+});
+
+adminRouter.patch('/coupons/:id', async (req, res) => {
+    const updatedCoupon = await Coupon.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(updatedCoupon);
+});
 
 // --- Server Start ---
 app.listen(port, () => console.log(`Server running on port ${port}`));

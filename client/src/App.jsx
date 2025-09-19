@@ -12,7 +12,7 @@ import MenuPage from './pages/MenuPage.jsx';
 import AdminLoginPage from './pages/AdminLoginPage.jsx';
 import { AboutPage, ContactPage } from './pages/StaticPage.jsx';
 import CartModal from './components/CartModalMain.jsx';
-import Header from './components/HeaderMain.jsX';
+import Header from './components/HeaderMain.jsx';
 import Footer from './components/FooterMain.jsx';
 import { GlobalStyles } from './styles/GlobalStyles.jsx';
 
@@ -81,7 +81,7 @@ function App() {
       }
   };
 
-  const submitOrder = () => {
+  const submitOrder = (finalTotal, appliedCoupon = null) => {
     const orderDetails = {
         items: cartItems.map(item => ({ 
             menuItemId: item._id, 
@@ -91,8 +91,15 @@ function App() {
             instructions: item.instructions
         })),
         totalPrice: cartItems.reduce((total, item) => total + item.priceAtOrder * item.quantity, 0),
+        finalPrice: finalTotal,
+        appliedCoupon: appliedCoupon ? {
+            code: appliedCoupon.code,
+            discountType: appliedCoupon.discountType,
+            discountValue: appliedCoupon.discountValue
+        } : undefined,
         customerName: auth.customer.name
     };
+
     api.post('/orders', orderDetails)
         .then(() => { 
             alert('Order placed successfully!'); 
@@ -137,7 +144,9 @@ function App() {
       case '#/admin': return isAdminLoggedIn ? <AdminDashboard adminName={auth.admin.name} handleLogout={handleLogout} /> : <AdminLoginPage onLoginSuccess={handleLoginSuccess} />;
       case '#/admin-register': return isAdminLoggedIn ? <AdminRegisterPage /> : <AdminLoginPage onLoginSuccess={handleLoginSuccess} />;
       case '#/dashboard': return isCustomerLoggedIn ? <CustomerDashboard userName={auth.customer.name} /> : <LoginPage onLoginSuccess={handleLoginSuccess} />;
-      case '#/': default: return <MenuPage items={menuItems} onAddToCart={handleAddToCart} />;
+      case '#/': 
+      default: 
+        return <MenuPage onAddToCart={handleAddToCart} />;
     }
   };
 

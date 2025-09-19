@@ -1,6 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Nav, Tab, Badge, Button, Modal, Form } from 'react-bootstrap';
-import { api } from '../api.js';
+import { Nav, Tab, Form, Button, Modal, Badge } from 'react-bootstrap';
+import { api } from '../api';
+
+// --- New Visual Order Status Tracker Component ---
+const OrderStatusTracker = ({ status }) => {
+    const statuses = ['Received', 'Preparing', 'Ready', 'Out for Delivery', 'Delivered'];
+    const currentStatusIndex = statuses.indexOf(status);
+
+    // Handle 'Rejected' status separately
+    if (status === 'Rejected') {
+        return <Badge bg="danger">Order Rejected</Badge>;
+    }
+
+    return (
+        <div className="d-flex align-items-center justify-content-between my-2">
+            {statuses.map((s, index) => {
+                const isActive = index <= currentStatusIndex;
+                return (
+                    <React.Fragment key={s}>
+                        <div className="d-flex flex-column align-items-center">
+                            <div className={`status-dot ${isActive ? 'active' : ''}`}></div>
+                            <small className={isActive ? 'fw-bold' : 'text-muted'}>{s}</small>
+                        </div>
+                        {index < statuses.length - 1 && <div className={`status-line ${isActive && index < currentStatusIndex ? 'active' : ''}`}></div>}
+                    </React.Fragment>
+                );
+            })}
+        </div>
+    );
+};
 
 const CustomerDashboard = ({ userName }) => {
     const [orders, setOrders] = useState([]);
@@ -10,22 +38,26 @@ const CustomerDashboard = ({ userName }) => {
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [complaintMessage, setComplaintMessage] = useState('');
 
+    const fetchData = async () => {
+        try {
+            const [ordersRes, complaintsRes] = await Promise.all([
+                api.get('/my-orders'),
+                api.get('/my-complaints')
+            ]);
+            setOrders(ordersRes.data);
+            setComplaints(complaintsRes.data);
+        } catch (error) {
+            console.error("Failed to fetch dashboard data:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+    
+    // Use polling to get live updates
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const [ordersRes, complaintsRes] = await Promise.all([
-                    api.get('/my-orders'),
-                    api.get('/my-complaints')
-                ]);
-                setOrders(ordersRes.data);
-                setComplaints(complaintsRes.data);
-            } catch (error) {
-                console.error("Failed to fetch dashboard data:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
+        fetchData(); // Initial fetch
+        const interval = setInterval(fetchData, 5000); // Poll every 5 seconds
+        return () => clearInterval(interval); // Cleanup on unmount
     }, []);
 
     const handleOpenComplaintModal = (order) => {
@@ -69,37 +101,60 @@ const CustomerDashboard = ({ userName }) => {
                     <Tab.Pane eventKey="orders">
                         <h3>Order History</h3>
                         {orders.length > 0 ? (
-                             <Table striped bordered hover responsive>
-                                <thead><tr><th>Date</th><th>Items</th><th>Total</th><th>Status</th><th>Action</th></tr></thead>
-                                <tbody>
-                                    {orders.map(order => (
-                                        <tr key={order._id}>
-                                            <td>{new Date(order.createdAt).toLocaleDateString()}</td>
-                                            <td><ul>{order.items.map(item => <li key={`${item.menuItemId?._id}-${item.variant}`}>{item.quantity}x {item.menuItemId?.name} ({item.variant})</li>)}</ul></td>
-                                            <td>${order.totalPrice.toFixed(2)}</td>
-                                            <td><Badge bg={order.status === 'Completed' ? 'success' : 'warning'}>{order.status}</Badge></td>
-                                            <td><Button variant="outline-secondary" size="sm" onClick={() => handleOpenComplaintModal(order)}>Raise Complaint</Button></td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </Table>
+                             <div className="table-responsive">
+                                <table className="table table-striped table-bordered table-hover">
+                                    <thead><tr><th>Date</th><th>Items</th><th>Total</th><th>Status</th><th>Action</th></tr></thead>
+                                    <tbody>
+                                        {orders.map(order => (
+                                            <tr key={order._id}>
+                                                <td>{new Date(order.createdAt).toLocaleDateString()}</td>
+                                                <td>
+                                                    <ul>
+                                                        {order.items.map(item => (
+                                                            <li key={`${order._id}-${item.menuItemId?._id}-${item.variant}`}>
+                                                                {item.quantity}x {item.menuItemId?.name} ({item.variant})
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </td>
+                                                <td>
+                                                    {order.appliedCoupon ? (
+                                                        <div>
+                                                            <span style={{ textDecoration: 'line-through' }} className="text-muted d-block">${order.totalPrice.toFixed(2)}</span>
+                                                            <strong className="d-block">${order.finalPrice.toFixed(2)}</strong>
+                                                        </div>
+                                                    ) : (
+                                                        <span>${order.totalPrice.toFixed(2)}</span>
+                                                    )}
+                                                </td>
+                                                <td style={{ minWidth: '300px' }}>
+                                                    <OrderStatusTracker status={order.status} />
+                                                </td>
+                                                <td><Button variant="outline-secondary" size="sm" onClick={() => handleOpenComplaintModal(order)}>Raise Complaint</Button></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         ) : <p>You haven't placed any orders yet.</p>}
                     </Tab.Pane>
                     <Tab.Pane eventKey="complaints">
                          <h3>Complaint History</h3>
                          {complaints.length > 0 ? (
-                            <Table striped bordered hover responsive>
-                                <thead><tr><th>Order Date</th><th>Message</th><th>Status</th></tr></thead>
-                                <tbody>
-                                    {complaints.map(c => (
-                                        <tr key={c._id}>
-                                            <td>{new Date(c.orderId?.createdAt).toLocaleDateString()}</td>
-                                            <td>{c.message}</td>
-                                            <td><Badge bg={c.status === 'Resolved' ? 'success' : 'info'}>{c.status}</Badge></td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </Table>
+                            <div className="table-responsive">
+                                <table className="table table-striped table-bordered table-hover">
+                                    <thead><tr><th>Order Date</th><th>Message</th><th>Status</th></tr></thead>
+                                    <tbody>
+                                        {complaints.map(c => (
+                                            <tr key={c._id}>
+                                                <td>{c.orderId ? new Date(c.orderId.createdAt).toLocaleDateString() : 'N/A'}</td>
+                                                <td>{c.message}</td>
+                                                <td><Badge bg={c.status === 'Resolved' ? 'success' : 'info'}>{c.status}</Badge></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                          ) : <p>You have no complaint history.</p>}
                     </Tab.Pane>
                 </Tab.Content>
