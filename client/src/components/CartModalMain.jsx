@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Button, Form, ListGroup, CloseButton, Alert } from 'react-bootstrap';
+import { Modal, Button, Form, ListGroup, CloseButton, Alert, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { api } from '../api';
 
 const RESTAURANT_LOCATION = { lat: 28.6330, lon: 77.2194 }; // Centered in Delhi, India
 const DELIVERY_RADIUS_KM = 2.5;
 
-// Haversine formula to calculate distance between two lat/lon points
+// Haversine formula to calculate distance
 function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
     const R = 6371; // Radius of the earth in km
     const dLat = (lat2 - lat1) * (Math.PI / 180);
@@ -25,6 +25,9 @@ const CartModal = ({ show, handleClose, cartItems, setCartItems, submitOrder, is
     const [address, setAddress] = useState('');
     const [isFetchingLocation, setIsFetchingLocation] = useState(false);
     const [deliveryCheck, setDeliveryCheck] = useState({ isDeliverable: null, message: '' });
+    
+    // Check if the page is loaded in a secure context (https)
+    const isSecureContext = window.isSecureContext;
 
     useEffect(() => {
         if (!show || cartItems.length === 0) {
@@ -37,7 +40,6 @@ const CartModal = ({ show, handleClose, cartItems, setCartItems, submitOrder, is
     }, [show, cartItems]);
 
     useEffect(() => {
-        // Check delivery radius whenever the address (from GPS) changes
         const coords = address.split(',').map(s => parseFloat(s.trim()));
         if (coords.length === 2 && !isNaN(coords[0]) && !isNaN(coords[1])) {
             const distance = getDistanceFromLatLonInKm(RESTAURANT_LOCATION.lat, RESTAURANT_LOCATION.lon, coords[0], coords[1]);
@@ -47,10 +49,9 @@ const CartModal = ({ show, handleClose, cartItems, setCartItems, submitOrder, is
                 setDeliveryCheck({ isDeliverable: false, message: `Sorry, you're ${distance.toFixed(1)} km away. We only deliver within ${DELIVERY_RADIUS_KM} km.` });
             }
         } else {
-             setDeliveryCheck({ isDeliverable: null, message: '' }); // Reset if address is not GPS
+             setDeliveryCheck({ isDeliverable: !!address.trim(), message: '' });
         }
     }, [address]);
-
 
     const handleQuantityChange = (item, quantity) => {
         if (quantity < 1) {
@@ -84,8 +85,12 @@ const CartModal = ({ show, handleClose, cartItems, setCartItems, submitOrder, is
                     setAddress(`${latitude}, ${longitude}`);
                     setIsFetchingLocation(false);
                 },
-                () => {
-                    alert('Unable to retrieve your location. Please enter it manually.');
+                (error) => {
+                    let errorMessage = 'Unable to retrieve your location. Please enter it manually.';
+                    if(error.code === 1) {
+                        errorMessage = 'Location permission denied. Please enable it in your browser settings.';
+                    }
+                    alert(errorMessage);
                     setIsFetchingLocation(false);
                 }
             );
@@ -110,6 +115,12 @@ const CartModal = ({ show, handleClose, cartItems, setCartItems, submitOrder, is
     };
     
     const isOrderButtonDisabled = !address.trim() || deliveryCheck.isDeliverable === false;
+    
+    const gpsButtonTooltip = (props) => (
+        <Tooltip id="button-tooltip" {...props}>
+          GPS requires a secure (https) connection.
+        </Tooltip>
+      );
 
     return (
         <Modal show={show} onHide={handleClose} size="lg">
@@ -147,9 +158,21 @@ const CartModal = ({ show, handleClose, cartItems, setCartItems, submitOrder, is
                                     onChange={(e) => setAddress(e.target.value)}
                                     required
                                 />
-                                <Button variant="outline-primary" onClick={handleGetLocation} disabled={isFetchingLocation}>
-                                    {isFetchingLocation ? '...' : 'GPS'}
-                                </Button>
+                                 <OverlayTrigger
+                                    placement="top"
+                                    overlay={!isSecureContext ? gpsButtonTooltip : <></>}
+                                >
+                                    <span className="d-inline-block">
+                                        <Button 
+                                            variant="outline-primary" 
+                                            onClick={handleGetLocation} 
+                                            disabled={isFetchingLocation || !isSecureContext}
+                                            style={!isSecureContext ? { pointerEvents: 'none' } : {}}
+                                        >
+                                            {isFetchingLocation ? '...' : 'GPS'}
+                                        </Button>
+                                    </span>
+                                </OverlayTrigger>
                             </div>
                             {deliveryCheck.message && (
                                <Alert variant={deliveryCheck.isDeliverable ? 'success' : 'danger'} className="mt-2 py-1 px-2" style={{fontSize: '0.8rem'}}>

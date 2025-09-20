@@ -10,7 +10,7 @@ const getToken = (url) => {
 
 // Create an Axios instance
 const api = axios.create({
-    baseURL: 'http://localhost:8001/api', // Or your live backend URL
+    baseURL: 'http://192.168.1.107:8001/api', // Or your live backend URL
 });
 
 // Use an interceptor to dynamically add the correct auth token

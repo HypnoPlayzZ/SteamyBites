@@ -7,7 +7,7 @@ import * as Tone from 'tone';
 // --- New Order Modal ---
 const NewOrderModal = ({ order, onAccept, onReject, show }) => {
     if (!order) return null;
-    const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.address)}`;
+    const mapUrl = `https://www.google.com/maps?q=${encodeURIComponent(order.address)}`;
     return (
         <Modal show={show} onHide={() => onReject(order._id)} centered backdrop="static" keyboard={false}>
             <Modal.Header className="bg-warning text-dark">
@@ -18,8 +18,8 @@ const NewOrderModal = ({ order, onAccept, onReject, show }) => {
                 <p><strong>Customer:</strong> {order.customerName}</p>
                 <p><strong>Address:</strong> <a href={mapUrl} target="_blank" rel="noopener noreferrer">{order.address}</a></p>
                 <ul>
-                    {order.items.map(item => (
-                        <li key={item.menuItemId?._id}>
+                    {order.items.map((item, index) => (
+                        <li key={`${order._id}-item-${index}`}>
                             {item.quantity}x {item.menuItemId?.name} ({item.variant})
                             {item.instructions && <small className="d-block text-muted"><em>"{item.instructions}"</em></small>}
                         </li>
@@ -38,7 +38,7 @@ const NewOrderModal = ({ order, onAccept, onReject, show }) => {
 
 // --- Order Card for Kanban View ---
 const OrderCard = ({ order, onAction, actionText, actionVariant = 'primary' }) => {
-    const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.address)}`;
+    const mapUrl = `https://www.google.com/maps?q=${encodeURIComponent(order.address)}`;
     return (
         <Card className="mb-3 shadow-sm">
             <Card.Body>
@@ -48,8 +48,8 @@ const OrderCard = ({ order, onAction, actionText, actionVariant = 'primary' }) =
                     <strong>Address:</strong> <a href={mapUrl} target="_blank" rel="noopener noreferrer">View on Map</a>
                 </Card.Text>
                 <ul>
-                    {order.items.map(item => (
-                        <li key={`${order._id}-${item.menuItemId?._id}`}>
+                    {order.items.map((item, index) => (
+                        <li key={`${order._id}-item-${index}`}>
                             {item.quantity}x {item.menuItemId?.name} ({item.variant})
                             {item.instructions && <small className="d-block text-info"><em>"{item.instructions}"</em></small>}
                         </li>
@@ -109,10 +109,13 @@ const LiveOrderManager = () => {
         api.get('/admin/orders')
             .then(response => {
                 const fetchedOrders = response.data;
-                const unacknowledged = fetchedOrders.filter(o => o.status === 'Received');
+                const newOrdersCount = fetchedOrders.filter(o => o.status === 'Received').length;
+                const previousNewOrdersCount = orders.filter(o => o.status === 'Received').length;
 
-                if (!initialLoad && unacknowledged.length > 0 && unacknowledged.length > orders.filter(o => o.status === 'Received').length) {
+                if (!initialLoad && newOrdersCount > 0 && newOrdersCount > previousNewOrdersCount) {
                     playNotificationSound();
+                } else if (newOrdersCount === 0) {
+                    stopNotificationSound();
                 }
                 
                 setOrders(fetchedOrders);
@@ -213,7 +216,7 @@ const AdminRegisterPage = () => {
     };
 
     return (
-       <div className="row justify-content-center fade-in mt-4">
+         <div className="row justify-content-center fade-in mt-4">
             <div className="col-md-8">
                 <Card className="shadow-sm">
                     <Card.Body className="p-5">
@@ -390,8 +393,8 @@ const MenuManager = () => {
                                             {(provided) => (
                                                 <div ref={provided.innerRef} {...provided.draggableProps}>
                                                     <Accordion.Item eventKey={index.toString()} >
-                                                        <Accordion.Header>
-                                                            <span {...provided.dragHandleProps} style={{ cursor: 'grab', marginRight: '10px' }}>
+                                                        <Accordion.Header {...provided.dragHandleProps}>
+                                                            <span style={{ cursor: 'grab', marginRight: '10px' }}>
                                                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-grip-vertical" viewBox="0 0 16 16">
                                                                     <path d="M7 2a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zM7 5a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zM7 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm-3 3a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm-3 3a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/>
                                                                 </svg>
@@ -740,3 +743,4 @@ const AdminDashboard = ({ adminName, handleLogout }) => {
 );
 }
 export default AdminDashboard;
+
