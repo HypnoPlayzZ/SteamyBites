@@ -1,8 +1,64 @@
 {
-  "hash": "b4a13423",
+  "hash": "198acb23",
   "configHash": "79fdbc87",
-  "lockfileHash": "e3b0c442",
-  "browserHash": "674c636f",
-  "optimized": {},
-  "chunks": {}
+  "lockfileHash": "9e7b5c44",
+  "browserHash": "ec23faca",
+  "optimized": {
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "505159b8",
+      "needsInterop": true
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "875343c9",
+      "needsInterop": true
+    },
+    "bootstrap/dist/js/bootstrap.bundle.min.js": {
+      "src": "../../node_modules/bootstrap/dist/js/bootstrap.bundle.min.js",
+      "file": "bootstrap_dist_js_bootstrap__bundle__min__js.js",
+      "fileHash": "9a4fd46f",
+      "needsInterop": true
+    },
+    "axios": {
+      "src": "../../node_modules/axios/index.js",
+      "file": "axios.js",
+      "fileHash": "476d2160",
+      "needsInterop": false
+    },
+    "react-bootstrap": {
+      "src": "../../node_modules/react-bootstrap/esm/index.js",
+      "file": "react-bootstrap.js",
+      "fileHash": "519de41e",
+      "needsInterop": false
+    },
+    "react-beautiful-dnd": {
+      "src": "../../node_modules/react-beautiful-dnd/dist/react-beautiful-dnd.esm.js",
+      "file": "react-beautiful-dnd.js",
+      "fileHash": "020f0074",
+      "needsInterop": false
+    },
+    "tone": {
+      "src": "../../node_modules/tone/build/esm/index.js",
+      "file": "tone.js",
+      "fileHash": "371d8c7b",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-JIFUZP3T": {
+      "file": "chunk-JIFUZP3T.js"
+    },
+    "chunk-TNTPHDQH": {
+      "file": "chunk-TNTPHDQH.js"
+    },
+    "chunk-32E4H3EV": {
+      "file": "chunk-32E4H3EV.js"
+    },
+    "chunk-G3PMV62Z": {
+      "file": "chunk-G3PMV62Z.js"
+    }
+  }
 }

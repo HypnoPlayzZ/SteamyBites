@@ -83,6 +83,7 @@ const OrderSchema = new mongoose.Schema({
         discountValue: Number
     },
     customerName: { type: String, required: true },
+    address: { type: String, required: true },
     status: { type: String, default: 'Received', enum: ['Received', 'Preparing', 'Ready', 'Out for Delivery', 'Delivered', 'Rejected'] },
     isAcknowledged: { type: Boolean, default: false },
 }, { timestamps: true });

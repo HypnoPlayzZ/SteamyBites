@@ -1,26 +1,62 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Button, Form, ListGroup, Badge, CloseButton, Alert } from 'react-bootstrap';
+import { Modal, Button, Form, ListGroup, CloseButton, Alert } from 'react-bootstrap';
 import { api } from '../api';
+
+const RESTAURANT_LOCATION = { lat: 28.6330, lon: 77.2194 }; // Centered in Delhi, India
+const DELIVERY_RADIUS_KM = 2.5;
+
+// Haversine formula to calculate distance between two lat/lon points
+function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Radius of the earth in km
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // Distance in km
+}
 
 const CartModal = ({ show, handleClose, cartItems, setCartItems, submitOrder, isLoggedIn }) => {
     const [couponCode, setCouponCode] = useState('');
     const [appliedCoupon, setAppliedCoupon] = useState(null);
     const [couponError, setCouponError] = useState('');
+    const [address, setAddress] = useState('');
+    const [isFetchingLocation, setIsFetchingLocation] = useState(false);
+    const [deliveryCheck, setDeliveryCheck] = useState({ isDeliverable: null, message: '' });
 
     useEffect(() => {
-        // Reset coupon state when the modal is closed or the cart becomes empty
         if (!show || cartItems.length === 0) {
             setCouponCode('');
             setAppliedCoupon(null);
             setCouponError('');
+            setAddress('');
+            setDeliveryCheck({ isDeliverable: null, message: '' });
         }
     }, [show, cartItems]);
 
+    useEffect(() => {
+        // Check delivery radius whenever the address (from GPS) changes
+        const coords = address.split(',').map(s => parseFloat(s.trim()));
+        if (coords.length === 2 && !isNaN(coords[0]) && !isNaN(coords[1])) {
+            const distance = getDistanceFromLatLonInKm(RESTAURANT_LOCATION.lat, RESTAURANT_LOCATION.lon, coords[0], coords[1]);
+            if (distance <= DELIVERY_RADIUS_KM) {
+                setDeliveryCheck({ isDeliverable: true, message: `Great! You're within our ${DELIVERY_RADIUS_KM} km delivery radius.` });
+            } else {
+                setDeliveryCheck({ isDeliverable: false, message: `Sorry, you're ${distance.toFixed(1)} km away. We only deliver within ${DELIVERY_RADIUS_KM} km.` });
+            }
+        } else {
+             setDeliveryCheck({ isDeliverable: null, message: '' }); // Reset if address is not GPS
+        }
+    }, [address]);
+
+
     const handleQuantityChange = (item, quantity) => {
-        if (quantity < 1) { 
-            setCartItems(cartItems.filter(cartItem => cartItem.cartId !== item.cartId)); 
-        } else { 
-            setCartItems(cartItems.map(cartItem => cartItem.cartId === item.cartId ? { ...cartItem, quantity: quantity } : cartItem)); 
+        if (quantity < 1) {
+            setCartItems(cartItems.filter(cartItem => cartItem.cartId !== item.cartId));
+        } else {
+            setCartItems(cartItems.map(cartItem => cartItem.cartId === item.cartId ? { ...cartItem, quantity } : cartItem));
         }
     };
 
@@ -38,6 +74,25 @@ const CartModal = ({ show, handleClose, cartItems, setCartItems, submitOrder, is
             setAppliedCoupon(null);
         }
     };
+
+    const handleGetLocation = () => {
+        if (navigator.geolocation) {
+            setIsFetchingLocation(true);
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const { latitude, longitude } = position.coords;
+                    setAddress(`${latitude}, ${longitude}`);
+                    setIsFetchingLocation(false);
+                },
+                () => {
+                    alert('Unable to retrieve your location. Please enter it manually.');
+                    setIsFetchingLocation(false);
+                }
+            );
+        } else {
+            alert("Geolocation is not supported by this browser.");
+        }
+    };
     
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -45,12 +100,17 @@ const CartModal = ({ show, handleClose, cartItems, setCartItems, submitOrder, is
             alert('Please log in to place an order.');
             window.location.hash = '#/login';
             handleClose();
+        } else if (!address.trim()) {
+            alert('Please enter a delivery address.');
+        } else if(deliveryCheck.isDeliverable === false){
+             alert('Your location is outside our delivery radius.');
         } else {
-            // Pass the final total and the applied coupon details to the submit function
-            submitOrder(finalTotal, appliedCoupon?.coupon);
+            submitOrder(finalTotal, appliedCoupon?.coupon, address);
         }
     };
     
+    const isOrderButtonDisabled = !address.trim() || deliveryCheck.isDeliverable === false;
+
     return (
         <Modal show={show} onHide={handleClose} size="lg">
             <Modal.Header closeButton><Modal.Title>Your Order</Modal.Title></Modal.Header>
@@ -75,6 +135,29 @@ const CartModal = ({ show, handleClose, cartItems, setCartItems, submitOrder, is
                             ))}
                         </ListGroup>
                         <hr />
+                        
+                        <Form.Group className="mb-3">
+                            <Form.Label className="fw-bold">Delivery Address</Form.Label>
+                            <div className="d-flex gap-2">
+                                <Form.Control 
+                                    as="textarea"
+                                    rows={2}
+                                    placeholder="Enter your address or use GPS"
+                                    value={address}
+                                    onChange={(e) => setAddress(e.target.value)}
+                                    required
+                                />
+                                <Button variant="outline-primary" onClick={handleGetLocation} disabled={isFetchingLocation}>
+                                    {isFetchingLocation ? '...' : 'GPS'}
+                                </Button>
+                            </div>
+                            {deliveryCheck.message && (
+                               <Alert variant={deliveryCheck.isDeliverable ? 'success' : 'danger'} className="mt-2 py-1 px-2" style={{fontSize: '0.8rem'}}>
+                                    {deliveryCheck.message}
+                                </Alert>
+                            )}
+                        </Form.Group>
+
                         <div className="coupon-input-group mb-3">
                             <Form.Control 
                                 placeholder="Enter coupon code" 
@@ -93,7 +176,7 @@ const CartModal = ({ show, handleClose, cartItems, setCartItems, submitOrder, is
                             <h4>Total: ${finalTotal.toFixed(2)}</h4>
                         </div>
                         <div className="d-grid mt-3">
-                            <Button variant="danger" type="button" onClick={handleSubmit}>Place Order</Button>
+                            <Button variant="danger" type="button" onClick={handleSubmit} disabled={isOrderButtonDisabled}>Place Order</Button>
                         </div>
                     </>
                 )}

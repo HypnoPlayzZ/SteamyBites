@@ -7,6 +7,7 @@ import * as Tone from 'tone';
 // --- New Order Modal ---
 const NewOrderModal = ({ order, onAccept, onReject, show }) => {
     if (!order) return null;
+    const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.address)}`;
     return (
         <Modal show={show} onHide={() => onReject(order._id)} centered backdrop="static" keyboard={false}>
             <Modal.Header className="bg-warning text-dark">
@@ -15,6 +16,7 @@ const NewOrderModal = ({ order, onAccept, onReject, show }) => {
             <Modal.Body>
                 <h5>Order #{order._id.slice(-6)}</h5>
                 <p><strong>Customer:</strong> {order.customerName}</p>
+                <p><strong>Address:</strong> <a href={mapUrl} target="_blank" rel="noopener noreferrer">{order.address}</a></p>
                 <ul>
                     {order.items.map(item => (
                         <li key={item.menuItemId?._id}>
@@ -35,27 +37,33 @@ const NewOrderModal = ({ order, onAccept, onReject, show }) => {
 };
 
 // --- Order Card for Kanban View ---
-const OrderCard = ({ order, onAction, actionText, actionVariant = 'primary' }) => (
-    <Card className="mb-3 shadow-sm">
-        <Card.Body>
-            <Card.Title>Order #{order._id.slice(-6)}</Card.Title>
-            <Card.Subtitle className="mb-2 text-muted">{order.customerName}</Card.Subtitle>
-            <ul>
-                {order.items.map(item => (
-                    <li key={item.menuItemId?._id}>
-                        {item.quantity}x {item.menuItemId?.name} ({item.variant})
-                        {item.instructions && <small className="d-block text-info"><em>"{item.instructions}"</em></small>}
-                    </li>
-                ))}
-            </ul>
-        </Card.Body>
-        <Card.Footer className="d-grid">
-            <Button variant={actionVariant} onClick={() => onAction(order._id)}>
-                {actionText}
-            </Button>
-        </Card.Footer>
-    </Card>
-);
+const OrderCard = ({ order, onAction, actionText, actionVariant = 'primary' }) => {
+    const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.address)}`;
+    return (
+        <Card className="mb-3 shadow-sm">
+            <Card.Body>
+                <Card.Title>Order #{order._id.slice(-6)}</Card.Title>
+                <Card.Subtitle className="mb-2 text-muted">{order.customerName}</Card.Subtitle>
+                <Card.Text>
+                    <strong>Address:</strong> <a href={mapUrl} target="_blank" rel="noopener noreferrer">View on Map</a>
+                </Card.Text>
+                <ul>
+                    {order.items.map(item => (
+                        <li key={`${order._id}-${item.menuItemId?._id}`}>
+                            {item.quantity}x {item.menuItemId?.name} ({item.variant})
+                            {item.instructions && <small className="d-block text-info"><em>"{item.instructions}"</em></small>}
+                        </li>
+                    ))}
+                </ul>
+            </Card.Body>
+            <Card.Footer className="d-grid">
+                <Button variant={actionVariant} onClick={() => onAction(order._id)}>
+                    {actionText}
+                </Button>
+            </Card.Footer>
+        </Card>
+    );
+};
 
 
 // --- Live Order Management Component ---
@@ -65,26 +73,23 @@ const LiveOrderManager = () => {
     const [initialLoad, setInitialLoad] = useState(true);
     const synth = useRef(null);
     const soundInterval = useRef(null);
+    const [isMuted, setIsMuted] = useState(false);
 
     useEffect(() => {
         synth.current = new Tone.Synth().toDestination();
         const startAudio = () => {
-            if (Tone.context.state !== 'running') {
-                Tone.context.resume();
-            }
+            if (Tone.context.state !== 'running') { Tone.context.resume(); }
             window.removeEventListener('click', startAudio);
         };
         window.addEventListener('click', startAudio);
-
-        return () => {
-            window.removeEventListener('click', startAudio);
-        }
+        return () => window.removeEventListener('click', startAudio);
     }, []);
 
     const playNotificationSound = () => {
+        if(isMuted) return;
         stopNotificationSound();
         const play = () => {
-             if (synth.current) {
+            if (synth.current) {
                 synth.current.triggerAttackRelease("C5", "8n", Tone.now());
                 synth.current.triggerAttackRelease("G5", "8n", Tone.now() + 0.2);
             }
@@ -149,6 +154,9 @@ const LiveOrderManager = () => {
     
     return (
         <>
+            <Button variant="outline-secondary" size="sm" className="mb-3" onClick={() => setIsMuted(!isMuted)}>
+                {isMuted ? 'Unmute Notifications' : 'Mute Notifications'}
+            </Button>
             {newOrders.map(order => (
                 <NewOrderModal 
                     key={order._id}
@@ -205,7 +213,7 @@ const AdminRegisterPage = () => {
     };
 
     return (
-         <div className="row justify-content-center fade-in mt-4">
+       <div className="row justify-content-center fade-in mt-4">
             <div className="col-md-8">
                 <Card className="shadow-sm">
                     <Card.Body className="p-5">
@@ -732,4 +740,3 @@ const AdminDashboard = ({ adminName, handleLogout }) => {
 );
 }
 export default AdminDashboard;
-
