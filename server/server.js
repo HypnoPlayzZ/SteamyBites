@@ -59,6 +59,11 @@ const MenuItemSchema = new mongoose.Schema({
     position: { type: Number, default: 0 }
 });
 
+const CategorySchema = new mongoose.Schema({
+    name: { type: String, required: true, unique: true },
+    position: { type: Number, required: true, default: 0 }
+});
+
 const OrderItemSchema = new mongoose.Schema({
     menuItemId: { type: mongoose.Schema.Types.ObjectId, ref: 'MenuItem', required: true },
     quantity: { type: Number, required: true },
@@ -106,6 +111,7 @@ const CouponSchema = new mongoose.Schema({
 });
 
 const MenuItem = mongoose.model('MenuItem', MenuItemSchema);
+const Category = mongoose.model('Category', CategorySchema);
 const Order = mongoose.model('Order', OrderSchema);
 const User = mongoose.model('User', UserSchema);
 const Complaint = mongoose.model('Complaint', ComplaintSchema);
@@ -147,20 +153,25 @@ app.get('/', (req, res) => {
 // Public Routes
 app.get('/api/menu', async (req, res) => {
     try {
-        const menuItems = await MenuItem.find().sort({ position: 1 });
-        const categorizedMenu = menuItems.reduce((acc, item) => {
-            const category = item.category;
-            if (!acc[category]) {
-                acc[category] = [];
-            }
-            acc[category].push(item);
-            return acc;
-        }, {});
+        const categories = await Category.find().sort({ position: 'asc' });
+        const menuItems = await MenuItem.find().sort({ position: 'asc' });
+
+        const categorizedMenu = categories.map(category => ({
+            name: category.name,
+            items: menuItems.filter(item => item.category === category.name)
+        }));
+        
+        const uncategorizedItems = menuItems.filter(item => !categories.some(c => c.name === item.category));
+        if (uncategorizedItems.length > 0) {
+            categorizedMenu.push({ name: 'Uncategorized', items: uncategorizedItems });
+        }
+
         res.json(categorizedMenu);
     } catch (error) {
         res.status(500).json({ message: 'Error fetching menu items' });
     }
 });
+
 
 app.get('/api/coupons', async (req, res) => {
     try {
@@ -312,7 +323,6 @@ adminRouter.patch('/orders/:id/status', async (req, res) => {
     }
 });
 
-
 adminRouter.patch('/orders/:id/acknowledge', async (req, res) => {
     try {
         const updatedOrder = await Order.findByIdAndUpdate(req.params.id, { isAcknowledged: true }, { new: true }).populate('items.menuItemId');
@@ -325,9 +335,21 @@ adminRouter.patch('/orders/:id/acknowledge', async (req, res) => {
     }
 });
 
+const ensureCategoryExists = async (categoryName) => {
+    if (!categoryName) return;
+    const existingCategory = await Category.findOne({ name: categoryName });
+    if (!existingCategory) {
+        const maxPos = await Category.findOne().sort({ position: -1 });
+        const newPosition = maxPos ? maxPos.position + 1 : 0;
+        const newCategory = new Category({ name: categoryName, position: newPosition });
+        await newCategory.save();
+    }
+};
+
 adminRouter.post('/menu', imageUpload.single('image'), async (req, res) => {
     try {
         const { name, description, priceHalf, priceFull, category } = req.body;
+        await ensureCategoryExists(category);
         const lastItem = await MenuItem.findOne({ category }).sort({ position: -1 });
         const newPosition = lastItem ? lastItem.position + 1 : 0;
         
@@ -365,9 +387,26 @@ adminRouter.patch('/menu/reorder', async (req, res) => {
     }
 });
 
+adminRouter.patch('/categories/reorder', async (req, res) => {
+    try {
+        const { orderedCategoryNames } = req.body;
+        const bulkOps = orderedCategoryNames.map((name, index) => ({
+            updateOne: {
+                filter: { name: name },
+                update: { $set: { position: index } }
+            }
+        }));
+        await Category.bulkWrite(bulkOps);
+        res.status(200).json({ message: 'Category order updated successfully.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to reorder categories.' });
+    }
+});
+
 adminRouter.patch('/menu/:id', imageUpload.single('image'), async (req, res) => {
     try {
         const { name, description, priceHalf, priceFull, category, imageUrl: existingImageUrl } = req.body;
+        await ensureCategoryExists(category);
         const updateData = {
             name,
             description,
@@ -427,6 +466,7 @@ adminRouter.post('/menu/upload-csv', csvUpload.single('csvFile'), async (req, re
                 try {
                     const name = row['Item'];
                     const category = row['Category'] || 'Uncategorized';
+                    await ensureCategoryExists(category);
                     const priceFullText = row['Full'] || row['Item Price'];
                     const priceHalfText = row['Half'];
 

@@ -27,6 +27,7 @@ const CouponDisplay = () => {
     );
 };
 
+
 // --- Customization Modal Component ---
 const CustomizationModal = ({ show, handleClose, item, onAddToCart }) => {
     if (!item) {
@@ -36,21 +37,22 @@ const CustomizationModal = ({ show, handleClose, item, onAddToCart }) => {
     const [variant, setVariant] = useState('full');
     const [quantity, setQuantity] = useState(1);
     const [instructions, setInstructions] = useState('');
-    const [price, setPrice] = useState(item.price.full);
+    const [price, setPrice] = useState(0);
 
     useEffect(() => {
         if (item) {
-            // Reset state when a new item is selected
             const initialVariant = item.price && item.price.half != null ? 'half' : 'full';
             setVariant(initialVariant);
             setQuantity(1);
             setInstructions('');
-            setPrice(item.price[initialVariant]);
+            if (item.price) {
+               setPrice(item.price[initialVariant]);
+            }
         }
     }, [item]);
 
     useEffect(() => {
-        if (item) {
+        if (item && item.price) {
             const newPrice = variant === 'half' ? item.price.half : item.price.full;
             setPrice(newPrice);
         }
@@ -81,7 +83,7 @@ const CustomizationModal = ({ show, handleClose, item, onAddToCart }) => {
                             <Col sm="10">
                                 <Form.Check
                                     type="radio"
-                                    label={`Half ($${item.price.half?.toFixed(2)})`}
+                                    label={`Half (₹${item.price.half?.toFixed(2)})`}
                                     name="variant"
                                     value="half"
                                     checked={variant === 'half'}
@@ -89,7 +91,7 @@ const CustomizationModal = ({ show, handleClose, item, onAddToCart }) => {
                                 />
                                 <Form.Check
                                     type="radio"
-                                    label={`Full ($${item.price.full?.toFixed(2)})`}
+                                    label={`Full (₹${item.price.full?.toFixed(2)})`}
                                     name="variant"
                                     value="full"
                                     checked={variant === 'full'}
@@ -121,7 +123,7 @@ const CustomizationModal = ({ show, handleClose, item, onAddToCart }) => {
                 </Form>
                 <div className="d-grid mt-4">
                      <Button variant="danger" onClick={handleAddToCartClick}>
-                        Add to Cart - Total: ${(price * quantity).toFixed(2)}
+                        Add to Cart - Total: ₹{(price * quantity).toFixed(2)}
                     </Button>
                 </div>
             </Modal.Body>
@@ -132,7 +134,7 @@ const CustomizationModal = ({ show, handleClose, item, onAddToCart }) => {
 
 // --- Main Menu Page Component ---
 const MenuPage = ({ onAddToCart }) => {
-    const [menu, setMenu] = useState({});
+    const [menu, setMenu] = useState([]); // Expect an array of categories
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [selectedItem, setSelectedItem] = useState(null);
@@ -176,14 +178,14 @@ const MenuPage = ({ onAddToCart }) => {
             <HeroSection />
             <CouponDisplay />
             
-            {Object.keys(menu).length === 0 && !loading && (
+            {menu.length === 0 && !loading && (
                 <div className="text-center">
                     <h2>Our menu is currently empty.</h2>
                     <p>Please check back later!</p>
                 </div>
             )}
 
-            {Object.entries(menu).map(([category, items]) => (
+            {menu.map(({ name: category, items }) => (
                 <div key={category} className="menu-list-container mb-4">
                     <h2 className="mb-4">{category}</h2>
                     {items.map((item, index) => (
@@ -191,15 +193,15 @@ const MenuPage = ({ onAddToCart }) => {
                             <div className="menu-item-details">
                                 <h5 className="item-name">{item.name}</h5>
                                 <p className="item-price">
-                                    {item.price.half != null && <span>${item.price.half.toFixed(2)} (Half)</span>}
+                                    {item.price.half != null && <span>₹{item.price.half.toFixed(2)} (Half)</span>}
                                     {item.price.half != null && item.price.full != null && " / "}
-                                    {item.price.full != null && <span>${item.price.full.toFixed(2)} (Full)</span>}
+                                    {item.price.full != null && <span>₹{item.price.full.toFixed(2)} (Full)</span>}
                                 </p>
                                 <p className="item-description">{item.description}</p>
                             </div>
                             <div className="menu-item-action">
                                 <div className="menu-item-image-container">
-                                     <img src={item.imageUrl || 'https://placehold.co/150x150/2c2c2c/e74c3c?text=Steamy'} alt={item.name} onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/150x150/2c2c2c/e74c3c?text=Steamy'; }}/>
+                                     <img src={item.imageUrl || 'https://placehold.co/150x150/ffecd2/212529?text=Steamy'} alt={item.name} onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/150x150/ffecd2/212529?text=Steamy'; }}/>
                                     <div className="add-button-container">
                                         <Button variant="light" onClick={() => handleShowModal(item)}>ADD</Button>
                                     </div>

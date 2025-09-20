@@ -1,26 +1,26 @@
 import axios from 'axios';
 
-// Create a single, configured Axios instance
-export const api = axios.create({
-    baseURL: 'http://localhost:8001/api',
+// A helper function to determine which token to use
+const getToken = (url) => {
+    if (url.startsWith('/admin')) {
+        return localStorage.getItem('admin_token');
+    }
+    return localStorage.getItem('customer_token');
+};
+
+// Create an Axios instance
+const api = axios.create({
+    baseURL: 'http://localhost:8001/api', // Or your live backend URL
 });
 
-// This "smart" interceptor checks the URL of each request 
-// and attaches the correct token (admin or customer).
+// Use an interceptor to dynamically add the correct auth token
 api.interceptors.request.use(config => {
-    let token;
-    
-    // If the request is for an admin route, use the admin token.
-    if (config.url.startsWith('/admin')) {
-        token = localStorage.getItem('admin_token');
-    } else {
-    // Otherwise, for all other routes (customer, public), use the customer token.
-        token = localStorage.getItem('customer_token');
-    }
-    
+    const token = getToken(config.url);
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
 });
+
+export { api };
 

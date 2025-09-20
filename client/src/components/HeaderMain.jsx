@@ -7,8 +7,8 @@ const Header = ({ route, auth, isCustomerLoggedIn, setShowCart, cartItems, handl
         <header>
             <nav className="navbar navbar-expand-lg navbar-light bg-light shadow-sm sticky-top">
                 <div className="container">
-                    <a className="navbar-brand" href="#/">
-                        <img src="https://placehold.co/40x40/ff8c00/FFFFFF?text=SB" alt="Steamy Bites Logo" className="d-inline-block align-text-top me-2 rounded-circle" />
+                    <a className="navbar-brand d-flex align-items-center" href="#/">
+                        <img src="https://lh3.googleusercontent.com/Ye0hjUzWm-MM4eTC3ma2TMvWviXUn2Ufdsqq7kEHCnKi5ZPSii3tW-D8Ei5C-4qgUCqGUHGXk0tk4AkJdnWPHAz7YbKEXYEjF2CeFn01" alt="Steamy Bites Logo" className="d-inline-block align-text-top me-2 rounded-circle" width="80"/>
                         <span className="fw-bold">Steamy Bites</span>
                     </a>
                     <button className="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">

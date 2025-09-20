@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Nav, Tab, Form, Button, Modal, Card, Alert, Accordion, Badge, Table } from 'react-bootstrap';
+import { Nav, Tab, Form, Button, Modal, Card, Alert, Accordion, Badge, Dropdown, Table } from 'react-bootstrap';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import { api } from '../api';
 import * as Tone from 'tone';
@@ -227,7 +227,7 @@ const AdminRegisterPage = () => {
 
 // --- Menu Management Component ---
 const MenuManager = () => {
-    const [menu, setMenu] = useState({});
+    const [menu, setMenu] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [currentItem, setCurrentItem] = useState(null);
@@ -323,23 +323,45 @@ const MenuManager = () => {
     };
 
     const onDragEnd = (result) => {
-        const { source, destination } = result;
+        const { source, destination, type } = result;
         if (!destination) return;
 
-        const sourceCategory = source.droppableId;
-        if (source.droppableId === destination.droppableId) {
-            const items = Array.from(menu[sourceCategory]);
-            const [reorderedItem] = items.splice(source.index, 1);
-            items.splice(destination.index, 0, reorderedItem);
+        if (type === 'CATEGORY') {
+            const reorderedCategories = Array.from(menu);
+            const [movedCategory] = reorderedCategories.splice(source.index, 1);
+            reorderedCategories.splice(destination.index, 0, movedCategory);
+            
+            setMenu(reorderedCategories);
 
-            setMenu(prevMenu => ({ ...prevMenu, [sourceCategory]: items }));
-
-            const orderedIds = items.map(item => item._id);
-            api.patch('/admin/menu/reorder', { category: sourceCategory, orderedIds })
+            const orderedCategoryNames = reorderedCategories.map(c => c.name);
+            api.patch('/admin/categories/reorder', { orderedCategoryNames })
                .catch(err => {
-                    alert('Failed to save new order. Reverting changes.');
+                    alert('Failed to save category order. Reverting.');
                     fetchMenu();
                });
+            return;
+        }
+
+        if (type === 'ITEM') {
+            const sourceCategoryIndex = menu.findIndex(c => c.name === source.droppableId);
+            const sourceCategory = menu[sourceCategoryIndex];
+            
+            const newMenuState = Array.from(menu);
+            const sourceItems = Array.from(sourceCategory.items);
+            const [movedItem] = sourceItems.splice(source.index, 1);
+
+            if (source.droppableId === destination.droppableId) {
+                sourceItems.splice(destination.index, 0, movedItem);
+                newMenuState[sourceCategoryIndex] = { ...sourceCategory, items: sourceItems };
+                setMenu(newMenuState);
+
+                const orderedIds = sourceItems.map(item => item._id);
+                api.patch('/admin/menu/reorder', { category: sourceCategory.name, orderedIds })
+                   .catch(err => {
+                        alert('Failed to save item order. Reverting.');
+                        fetchMenu();
+                   });
+            }
         }
     };
     
@@ -351,55 +373,75 @@ const MenuManager = () => {
             
             {isClient && (
                 <DragDropContext onDragEnd={onDragEnd}>
-                    <Accordion defaultActiveKey="0" alwaysOpen>
-                        {Object.entries(menu).map(([category, items], index) => (
-                            <Accordion.Item eventKey={index.toString()} key={category}>
-                                <Accordion.Header>{category} ({items.length})</Accordion.Header>
-                                <Accordion.Body>
-                                    <div className="table-responsive">
-                                        <Table striped bordered hover>
-                                            <thead>
-                                                <tr>
-                                                    <th style={{ width: '40px' }}></th>
-                                                    <th>Name</th>
-                                                    <th>Half Price</th>
-                                                    <th>Full Price</th>
-                                                    <th>Actions</th>
-                                                </tr>
-                                            </thead>
-                                            <Droppable droppableId={category}>
-                                                {(provided) => (
-                                                    <tbody ref={provided.innerRef} {...provided.droppableProps}>
-                                                        {items.map((item, idx) => (
-                                                            <Draggable key={item._id} draggableId={item._id.toString()} index={idx}>
-                                                                {(provided) => (
-                                                                    <tr ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
-                                                                        <td style={{ cursor: 'grab' }}>
-                                                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-grip-vertical" viewBox="0 0 16 16">
-                                                                                <path d="M7 2a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zM7 5a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zM7 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm-3 3a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm-3 3a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/>
-                                                                            </svg>
-                                                                        </td>
-                                                                        <td>{item.name}</td>
-                                                                        <td>${item.price.half != null ? item.price.half.toFixed(2) : 'N/A'}</td>
-                                                                        <td>${item.price.full.toFixed(2)}</td>
-                                                                        <td>
-                                                                            <Button variant="outline-primary" size="sm" className="me-2" onClick={() => handleShowModal(item)}>Edit</Button>
-                                                                            <Button variant="outline-secondary" size="sm" onClick={() => handleDelete(item._id)}>Delete</Button>
-                                                                        </td>
-                                                                    </tr>
-                                                                )}
-                                                            </Draggable>
-                                                        ))}
-                                                        {provided.placeholder}
-                                                    </tbody>
-                                                )}
-                                            </Droppable>
-                                        </Table>
-                                    </div>
-                                </Accordion.Body>
-                            </Accordion.Item>
-                        ))}
-                    </Accordion>
+                    <Droppable droppableId="all-categories" type="CATEGORY">
+                        {(provided) => (
+                            <div {...provided.droppableProps} ref={provided.innerRef}>
+                                <Accordion defaultActiveKey="0" alwaysOpen>
+                                    {menu.map((category, index) => (
+                                        <Draggable key={category.name} draggableId={category.name} index={index}>
+                                            {(provided) => (
+                                                <div ref={provided.innerRef} {...provided.draggableProps}>
+                                                    <Accordion.Item eventKey={index.toString()} >
+                                                        <Accordion.Header>
+                                                            <span {...provided.dragHandleProps} style={{ cursor: 'grab', marginRight: '10px' }}>
+                                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-grip-vertical" viewBox="0 0 16 16">
+                                                                    <path d="M7 2a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zM7 5a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zM7 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm-3 3a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm-3 3a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/>
+                                                                </svg>
+                                                            </span>
+                                                            {category.name} ({category.items.length})
+                                                        </Accordion.Header>
+                                                        <Accordion.Body>
+                                                            <div className="table-responsive">
+                                                                <Table striped bordered hover>
+                                                                    <thead>
+                                                                        <tr>
+                                                                            <th style={{ width: '40px' }}></th>
+                                                                            <th>Name</th>
+                                                                            <th>Half Price</th>
+                                                                            <th>Full Price</th>
+                                                                            <th>Actions</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <Droppable droppableId={category.name} type="ITEM">
+                                                                        {(provided) => (
+                                                                            <tbody ref={provided.innerRef} {...provided.droppableProps}>
+                                                                                {category.items.map((item, idx) => (
+                                                                                    <Draggable key={item._id} draggableId={item._id.toString()} index={idx}>
+                                                                                        {(provided) => (
+                                                                                            <tr ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
+                                                                                                <td style={{ cursor: 'grab' }}>
+                                                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-grip-vertical" viewBox="0 0 16 16">
+                                                                                                        <path d="M7 2a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zM7 5a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zM7 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm-3 3a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm-3 3a1 1 0 1 1-2 0 1 1 0 0 1 2 0zm3 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/>
+                                                                                                    </svg>
+                                                                                                </td>
+                                                                                                <td>{item.name}</td>
+                                                                                                <td>${item.price.half != null ? item.price.half.toFixed(2) : 'N/A'}</td>
+                                                                                                <td>${item.price.full.toFixed(2)}</td>
+                                                                                                <td>
+                                                                                                    <Button variant="outline-primary" size="sm" className="me-2" onClick={() => handleShowModal(item)}>Edit</Button>
+                                                                                                    <Button variant="outline-secondary" size="sm" onClick={() => handleDelete(item._id)}>Delete</Button>
+                                                                                                </td>
+                                                                                            </tr>
+                                                                                        )}
+                                                                                    </Draggable>
+                                                                                ))}
+                                                                                {provided.placeholder}
+                                                                            </tbody>
+                                                                        )}
+                                                                    </Droppable>
+                                                                </Table>
+                                                            </div>
+                                                        </Accordion.Body>
+                                                    </Accordion.Item>
+                                                </div>
+                                            )}
+                                        </Draggable>
+                                    ))}
+                                    {provided.placeholder}
+                                </Accordion>
+                            </div>
+                        )}
+                    </Droppable>
                 </DragDropContext>
             )}
 
@@ -425,8 +467,237 @@ const MenuManager = () => {
     );
 };
 
+
+// --- Complaint Management Component ---
+const ComplaintManager = () => {
+    const [complaints, setComplaints] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        api.get('/admin/complaints')
+            .then(res => setComplaints(res.data))
+            .catch(err => console.error("Failed to fetch complaints:", err))
+            .finally(() => setLoading(false));
+    }, []);
+
+    const handleStatusChange = (id, status) => {
+        api.patch(`/admin/complaints/${id}`, { status })
+            .then(res => {
+                setComplaints(prev => prev.map(c => c._id === id ? res.data : c));
+            })
+            .catch(err => alert('Failed to update complaint status.'));
+    };
+
+    if (loading) return <div className="text-center"><div className="spinner-border text-danger"></div></div>;
+
+    return (
+        <div className="table-responsive">
+            <Table striped bordered hover>
+                <thead><tr><th>Customer</th><th>Order Date</th><th>Message</th><th>Status</th></tr></thead>
+                <tbody>
+                    {complaints.map(c => (
+                        <tr key={c._id}>
+                            <td>{c.user ? `${c.user.name} (${c.user.email})` : 'User Not Found'}</td>
+                            <td>{c.orderId ? new Date(c.orderId.createdAt).toLocaleString() : 'N/A'}</td>
+                            <td>{c.message}</td>
+                            <td>
+                                 <Form.Select size="sm" value={c.status} onChange={(e) => handleStatusChange(c._id, e.target.value)}>
+                                    <option>Pending</option><option>In Progress</option><option>Resolved</option>
+                                </Form.Select>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </Table>
+        </div>
+    );
+};
+
+
+// --- Bulk Upload Component ---
+const BulkUploadManager = () => {
+    const [csvFile, setCsvFile] = useState(null);
+    const [isUploading, setIsUploading] = useState(false);
+    const [uploadResult, setUploadResult] = useState(null);
+    const [error, setError] = useState('');
+
+    const handleFileChange = (e) => {
+        setCsvFile(e.target.files[0]);
+        setUploadResult(null);
+        setError('');
+    };
+
+    const handleUpload = async () => {
+        if (!csvFile) {
+            setError('Please select a CSV file to upload.');
+            return;
+        }
+
+        setIsUploading(true);
+        setError('');
+        setUploadResult(null);
+
+        const formData = new FormData();
+        formData.append('csvFile', csvFile);
+
+        try {
+            const response = await api.post('/admin/menu/upload-csv', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            setUploadResult(response.data);
+        } catch (err) {
+            setError('Upload failed. Please check the file format or server logs.');
+            console.error(err);
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const handleDownloadSample = () => {
+        const csvContent = "Item,Category,Item Price,Half,Full\n" +
+                           "Veg Momos,Appetizers,,130,250\n" +
+                           "Paneer Chilli Dry,Main Course,,350,500\n" +
+                           "Veg Burger,Snacks,100,,\n";
+        
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        if (link.download !== undefined) { 
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", "sample-menu.csv");
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    };
+
+    return (
+        <Card className="shadow-sm">
+            <Card.Body className="p-4">
+                <Card.Title>Upload Menu CSV</Card.Title>
+                <Card.Text>
+                    Upload a CSV file with columns: "Item", "Category", "Item Price", "Half", and "Full" to bulk update your menu.
+                </Card.Text>
+                <Form.Group className="mb-3">
+                    <Form.Control type="file" accept=".csv" onChange={handleFileChange} />
+                </Form.Group>
+                <div className="d-flex gap-2">
+                    <Button onClick={handleUpload} disabled={isUploading}>
+                        {isUploading ? 'Uploading...' : 'Upload File'}
+                    </Button>
+                    <Button variant="outline-secondary" onClick={handleDownloadSample}>
+                        Download Sample
+                    </Button>
+                </div>
+
+                {error && <Alert variant="danger" className="mt-3">{error}</Alert>}
+                {uploadResult && (
+                    <Alert variant="success" className="mt-3">
+                        <Alert.Heading>Upload Complete!</Alert.Heading>
+                        <p>{uploadResult.message}</p>
+                        <hr />
+                        <p className="mb-0">
+                            Items Created: {uploadResult.created} | Items Updated: {uploadResult.updated}
+                        </p>
+                    </Alert>
+                )}
+            </Card.Body>
+        </Card>
+    );
+};
+
+// --- New Coupon Management Component ---
+const CouponManager = () => {
+    const [coupons, setCoupons] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
+    const [formData, setFormData] = useState({ code: '', description: '', discountType: 'percentage', discountValue: 0 });
+
+    const fetchCoupons = () => {
+        api.get('/admin/coupons').then(res => {
+            setCoupons(res.data);
+            setIsLoading(false);
+        });
+    };
+
+    useEffect(fetchCoupons, []);
+
+    const handleFormChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        try {
+            await api.post('/admin/coupons', { ...formData, code: formData.code.toUpperCase() });
+            setShowModal(false);
+            fetchCoupons();
+        } catch (error) {
+            alert('Failed to create coupon. Make sure the code is unique.');
+        }
+    };
+    
+    const toggleCouponStatus = async (coupon) => {
+        try {
+            await api.patch(`/admin/coupons/${coupon._id}`, { isActive: !coupon.isActive });
+            fetchCoupons();
+        } catch (error) {
+            alert('Failed to update coupon status.');
+        }
+    };
+
+    if (isLoading) return <div className="text-center"><div className="spinner-border text-danger" role="status"></div></div>;
+
+    return (
+        <>
+            <Button onClick={() => setShowModal(true)} className="mb-3">Create New Coupon</Button>
+            <div className="table-responsive">
+                <Table striped bordered hover>
+                    <thead>
+                        <tr><th>Code</th><th>Description</th><th>Type</th><th>Value</th><th>Status</th><th>Actions</th></tr>
+                    </thead>
+                    <tbody>
+                        {coupons.map(coupon => (
+                            <tr key={coupon._id}>
+                                <td>{coupon.code}</td>
+                                <td>{coupon.description}</td>
+                                <td>{coupon.discountType}</td>
+                                <td>{coupon.discountType === 'percentage' ? `${coupon.discountValue}%` : `$${coupon.discountValue.toFixed(2)}`}</td>
+                                <td>
+                                    <Badge bg={coupon.isActive ? 'success' : 'secondary'}>
+                                        {coupon.isActive ? 'Active' : 'Inactive'}
+                                    </Badge>
+                                </td>
+                                <td>
+                                    <Button size="sm" variant={coupon.isActive ? 'warning' : 'success'} onClick={() => toggleCouponStatus(coupon)}>
+                                        {coupon.isActive ? 'Deactivate' : 'Activate'}
+                                    </Button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </Table>
+            </div>
+            
+            <Modal show={showModal} onHide={() => setShowModal(false)}>
+                <Modal.Header closeButton><Modal.Title>Create Coupon</Modal.Title></Modal.Header>
+                <Modal.Body>
+                    <Form onSubmit={handleSubmit}>
+                        <Form.Group className="mb-3"><Form.Label>Coupon Code</Form.Label><Form.Control type="text" name="code" onChange={handleFormChange} required /></Form.Group>
+                        <Form.Group className="mb-3"><Form.Label>Description</Form.Label><Form.Control type="text" name="description" onChange={handleFormChange} required /></Form.Group>
+                        <Form.Group className="mb-3"><Form.Label>Discount Type</Form.Label><Form.Select name="discountType" onChange={handleFormChange}><option value="percentage">Percentage</option><option value="fixed">Fixed Amount</option></Form.Select></Form.Group>
+                        <Form.Group className="mb-3"><Form.Label>Discount Value</Form.Label><Form.Control type="number" name="discountValue" onChange={handleFormChange} required /></Form.Group>
+                        <Button type="submit">Create</Button>
+                    </Form>
+                </Modal.Body>
+            </Modal>
+        </>
+    );
+};
+
 // --- Main Admin Dashboard Component ---
-const AdminDashboard = ({ adminName, handleLogout }) => (
+const AdminDashboard = ({ adminName, handleLogout }) => {
+    const [activeTab, setActiveTab] = useState('live-orders');
+    return (
     <div className="fade-in">
         <div className="d-flex justify-content-between align-items-center mb-4">
             <h1>Admin Dashboard</h1>
@@ -435,19 +706,30 @@ const AdminDashboard = ({ adminName, handleLogout }) => (
                 <Button variant="outline-secondary" size="sm" onClick={() => handleLogout('admin')}>Logout</Button>
             </div>
         </div>
-        <Tab.Container defaultActiveKey="live-orders">
+        <Tab.Container activeKey={activeTab} onSelect={(k) => setActiveTab(k)}>
             <Nav variant="tabs" className="mb-3 justify-content-center">
                 <Nav.Item><Nav.Link eventKey="live-orders">Live Orders</Nav.Link></Nav.Item>
-                <Nav.Item><Nav.Link eventKey="menu">Manage Menu</Nav.Link></Nav.Item>
-                <Nav.Item><Nav.Link href="#/admin-register">Register New Admin</Nav.Link></Nav.Item>
+                <Dropdown as={Nav.Item}>
+                    <Dropdown.Toggle as={Nav.Link}>Menu & More</Dropdown.Toggle>
+                    <Dropdown.Menu>
+                        <Dropdown.Item eventKey="menu">Manage Menu</Dropdown.Item>
+                        <Dropdown.Item eventKey="bulk-upload">Bulk Upload</Dropdown.Item>
+                        <Dropdown.Item eventKey="coupons">Manage Coupons</Dropdown.Item>
+                    </Dropdown.Menu>
+                </Dropdown>
+                <Nav.Item><Nav.Link eventKey="complaints">Complaints</Nav.Link></Nav.Item>
+                <Nav.Item><Nav.Link href="#/admin-register">Register Admin</Nav.Link></Nav.Item>
             </Nav>
             <Tab.Content>
                 <Tab.Pane eventKey="live-orders"><LiveOrderManager /></Tab.Pane>
                 <Tab.Pane eventKey="menu"><MenuManager /></Tab.Pane>
+                <Tab.Pane eventKey="complaints"><ComplaintManager /></Tab.Pane>
+                <Tab.Pane eventKey="bulk-upload"><BulkUploadManager /></Tab.Pane>
+                <Tab.Pane eventKey="coupons"><CouponManager /></Tab.Pane>
             </Tab.Content>
         </Tab.Container>
     </div>
 );
-
+}
 export default AdminDashboard;
 
