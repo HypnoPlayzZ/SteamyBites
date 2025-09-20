@@ -1,21 +1,14 @@
 import axios from 'axios';
 
-// A helper function to determine which token to use
-const getToken = (url) => {
-    if (url.startsWith('/admin')) {
-        return localStorage.getItem('admin_token');
-    }
-    return localStorage.getItem('customer_token');
-};
-
-// Create an Axios instance
+// Create an Axios instance for the admin portal
 const api = axios.create({
-    baseURL: 'http://192.168.1.107:8001/api', // Or your live backend URL
+    // IMPORTANT: Replace this with your actual Vercel backend URL
+    baseURL: 'https://steamy-bites.vercel.app/api', 
 });
 
-// Use an interceptor to dynamically add the correct auth token
+// Use an interceptor to attach the admin token to all requests
 api.interceptors.request.use(config => {
-    const token = getToken(config.url);
+    const token = localStorage.getItem('admin_token');
     if (token) {
         config.headers.Authorization = `Bearer ${token}`;
     }

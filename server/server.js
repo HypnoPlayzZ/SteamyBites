@@ -30,9 +30,8 @@ const csvUpload = multer({ storage: multer.memoryStorage() });
 
 const app = express();
 const port = process.env.PORT || 8001;
-const mongoURI = process.env.MONGODB_URI || 'mongodb+srv://amplify:22453372@chetanbackend.rckxgtc.mongodb.net/?retryWrites=true&w=majority&appName=ChetanBackend';
-const jwtSecret = process.env.JWT_SECRET || 'your_jwt_secret_key';
-
+const mongoURI = process.env.MONGODB_URI
+const jwtSecret = process.env.JWT_SECRET
 app.use(cors());
 app.use(express.json());
 
